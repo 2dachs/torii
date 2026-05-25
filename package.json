@@ -1,0 +1,382 @@
+{
+  "name": "torii",
+  "displayName": "Torii — AI Coding Agent for VS Code",
+  "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
+  "version": "0.2.7",
+  "publisher": "pettal",
+  "icon": "resources/icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/2dachs/torii"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Chat"
+  ],
+  "keywords": [
+    "ai",
+    "chat",
+    "coding assistant",
+    "openai",
+    "deepseek",
+    "claude",
+    "task management",
+    "japanese",
+    "budget",
+    "ollama",
+    "local llm"
+  ],
+  "activationEvents": [
+    "onView:torii-view",
+    "onCommand:torii.openSettings",
+    "onCommand:torii.clearHistory",
+    "onCommand:torii.setupOllama",
+    "onCommand:torii.upgradePro"
+  ],
+  "main": "./dist/ext/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "torii-panel",
+          "title": "Torii",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "torii-panel": [
+        {
+          "id": "torii-view",
+          "name": "Chat",
+          "type": "webview",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "torii.openSettings",
+        "title": "Open Torii Settings"
+      },
+      {
+        "command": "torii.clearHistory",
+        "title": "Clear Chat History"
+      },
+      {
+        "command": "torii.setupOllama",
+        "title": "Torii: Ollama ローカルLLMをセットアップ"
+      },
+      {
+        "command": "torii.upgradePro",
+        "title": "Torii: Proプランにアップグレード"
+      }
+    ],
+    "configuration": {
+      "title": "Torii",
+      "properties": {
+        "torii.provider": {
+          "type": "string",
+          "default": "deepseek",
+          "enum": [
+            "openai",
+            "deepseek",
+            "anthropic",
+            "ollama",
+            "gemini",
+            "openrouter"
+          ],
+          "enumDescriptions": [
+            "OpenAI (GPT-4o, GPT-4o-mini)",
+            "DeepSeek (Flash/Pro) - 推奨",
+            "Anthropic Claude (Sonnet/Opus)",
+            "Ollama ローカル実行 (Qwen 2.5 Coder) - APIキー不要・無料",
+            "Google Gemini (2.5 Flash/Pro) - 画像読み取り・マルチモーダル",
+            "OpenRouter - GPT-4o・Claude・Llama 等を1つのAPIキーで使えるゲートウェイ"
+          ],
+          "description": "デフォルトで使用するAIプロバイダー"
+        },
+        "torii.autoRouting": {
+          "type": "boolean",
+          "default": true,
+          "description": "プロンプト内容に応じて最適なプロバイダー・モデルに自動ルーティングする"
+        },
+        "torii.openai.endpoint": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI API エンドポイント"
+        },
+        "torii.openai.model": {
+          "type": "string",
+          "default": "gpt-4o",
+          "enum": [
+            "gpt-4o",
+            "gpt-4o-mini"
+          ],
+          "enumDescriptions": [
+            "GPT-4o - マルチモーダル対応フラッグシップ",
+            "GPT-4o Mini - 低コスト軽量モデル"
+          ],
+          "description": "OpenAI モデル"
+        },
+        "torii.openai.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 128000,
+          "description": "OpenAI 最大トークン数"
+        },
+        "torii.deepseek.endpoint": {
+          "type": "string",
+          "default": "https://api.deepseek.com/v1",
+          "description": "DeepSeek API エンドポイント"
+        },
+        "torii.deepseek.model": {
+          "type": "string",
+          "default": "deepseek-chat",
+          "enum": [
+            "deepseek-chat",
+            "deepseek-reasoner"
+          ],
+          "enumDescriptions": [
+            "DeepSeek Flash - 高速・低コスト日常コーディング向け",
+            "DeepSeek Pro - 高度な推論・設計向け"
+          ],
+          "description": "DeepSeek モデル"
+        },
+        "torii.deepseek.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 128000,
+          "description": "DeepSeek 最大トークン数"
+        },
+        "torii.anthropic.endpoint": {
+          "type": "string",
+          "default": "https://api.anthropic.com/v1",
+          "description": "Anthropic API エンドポイント"
+        },
+        "torii.anthropic.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-20250514",
+          "enum": [
+            "claude-sonnet-4-20250514",
+            "claude-opus-4-20250514"
+          ],
+          "enumDescriptions": [
+            "Claude Sonnet - バランスの取れた高性能モデル",
+            "Claude Opus - セキュリティ・アーキテクチャ最高峰"
+          ],
+          "description": "Anthropic Claude モデル"
+        },
+        "torii.anthropic.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 128000,
+          "description": "Anthropic Claude 最大トークン数"
+        },
+        "torii.ollama.endpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama API エンドポイント (通常は変更不要)"
+        },
+        "torii.ollama.model": {
+          "type": "string",
+          "default": "qwen2.5-coder",
+          "description": "Ollama モデル名"
+        },
+        "torii.ollama.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 128000,
+          "description": "Ollama 最大トークン数"
+        },
+        "torii.gemini.endpoint": {
+          "type": "string",
+          "default": "https://generativelanguage.googleapis.com/v1beta",
+          "description": "Google Gemini API エンドポイント"
+        },
+        "torii.gemini.model": {
+          "type": "string",
+          "default": "gemini-2.5-flash",
+          "enum": [
+            "gemini-2.5-flash",
+            "gemini-2.5-pro"
+          ],
+          "enumDescriptions": [
+            "Gemini 2.5 Flash - 画像読み取り・低コスト (自動橋渡しにも使用)",
+            "Gemini 2.5 Pro - 高精度マルチモーダル処理"
+          ],
+          "description": "Google Gemini モデル"
+        },
+        "torii.gemini.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 65536,
+          "description": "Google Gemini 最大トークン数"
+        },
+        "torii.openrouter.endpoint": {
+          "type": "string",
+          "default": "https://openrouter.ai/api/v1",
+          "description": "OpenRouter API エンドポイント"
+        },
+        "torii.openrouter.model": {
+          "type": "string",
+          "default": "openai/gpt-4o",
+          "description": "OpenRouter モデルID（例: openai/gpt-4o, anthropic/claude-3-5-sonnet, meta-llama/llama-3.1-8b-instruct）"
+        },
+        "torii.openrouter.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 128000,
+          "description": "OpenRouter 最大トークン数"
+        },
+        "torii.openrouter.modelSlots": {
+          "type": "array",
+          "default": ["openai/gpt-4o", "", ""],
+          "maxItems": 3,
+          "items": { "type": "string" },
+          "description": "OpenRouter よく使うモデルID（最大3件）。設定画面のスロットに表示される"
+        },
+        "torii.monthlyBudget": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "description": "月間API利用予算上限 (USD)。0にすると無制限"
+        },
+        "torii.autoApplyFileChanges": {
+          "type": "boolean",
+          "default": false,
+          "description": "エージェントがファイルを書き換える際、Applyボタンの確認をスキップして自動書き込みします（Claude Code寄りの動作）"
+        },
+        "torii.mainProvider": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "openai",
+            "deepseek",
+            "anthropic",
+            "ollama",
+            "gemini",
+            "openrouter"
+          ],
+          "description": "メインモデルのプロバイダー（空の場合はprovider設定を使用）"
+        },
+        "torii.mainModel": {
+          "type": "string",
+          "default": "",
+          "description": "メインモデルのモデルID（空の場合はプロバイダーのデフォルトを使用）"
+        },
+        "torii.subProvider": {
+          "type": "string",
+          "default": "ollama",
+          "enum": [
+            "openai",
+            "deepseek",
+            "anthropic",
+            "ollama",
+            "gemini",
+            "openrouter"
+          ],
+          "description": "サブモデル（フォールバック先）のプロバイダー"
+        },
+        "torii.subModel": {
+          "type": "string",
+          "default": "qwen2.5-coder",
+          "description": "サブモデルのモデルID"
+        },
+        "torii.modelLimits": {
+          "type": "array",
+          "default": [],
+          "description": "モデル別の月間使用上限設定",
+          "items": {
+            "type": "object",
+            "properties": {
+              "modelId": {
+                "type": "string",
+                "description": "モデルID"
+              },
+              "maxCallsPerMonth": {
+                "type": "number",
+                "description": "月間最大呼び出し回数"
+              },
+              "maxCostUsdPerMonth": {
+                "type": "number",
+                "description": "月間最大コスト（USD）"
+              }
+            }
+          }
+        },
+        "torii.escalationEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Local→Flash→Opusの3段エスカレーションを有効にする"
+        },
+        "torii.escalateProvider1": {
+          "type": "string",
+          "default": "",
+          "description": "上位モデル再実行 スロット1のプロバイダーID"
+        },
+        "torii.escalateModel1": {
+          "type": "string",
+          "default": "",
+          "description": "上位モデル再実行 スロット1のモデルID"
+        },
+        "torii.escalateProvider2": {
+          "type": "string",
+          "default": "",
+          "description": "上位モデル再実行 スロット2のプロバイダーID"
+        },
+        "torii.escalateModel2": {
+          "type": "string",
+          "default": "",
+          "description": "上位モデル再実行 スロット2のモデルID"
+        },
+        "torii.displayCurrency": {
+          "type": "string",
+          "enum": ["JPY", "USD"],
+          "default": "JPY",
+          "description": "予算バーの通貨表示 (JPY: 日本円 / USD: 米ドル)"
+        },
+        "torii.customPrivacyKeywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "ローカルLLMに自動ルーティングする追加キーワード（個人情報・機密情報）"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile && npm run build:webview",
+    "compile": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\"",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" --watch",
+    "build:webview": "cd webview && npm run build",
+    "dev:webview": "cd webview && npm run dev",
+    "lint": "eslint src --ext ts,tsx"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/uuid": "^9.0.7",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@cline/sdk": "^0.0.41",
+    "express": "^4.18.2",
+    "portfinder": "^1.0.32",
+    "uuid": "^9.0.0"
+  }
+}

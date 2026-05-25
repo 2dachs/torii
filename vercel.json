@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd webview && npm install && npm run build",
+  "outputDirectory": "webview/dist",
+  "framework": null
+}
