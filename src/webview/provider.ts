@@ -1005,7 +1005,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   /** WebView からのプロバイダー設定更新を VS Code 設定に反映 */
-  private async _handleUpdateProviderConfig(providerId: string, config: { endpoint?: string; model?: string; provider?: string; autoRouting?: boolean; modelSlots?: string[] }) {
+  private async _handleUpdateProviderConfig(providerId: string, config: { endpoint?: string; model?: string; provider?: string; autoRouting?: boolean; modelSlots?: string[]; mainModel?: string; mainProvider?: string }) {
     const configTarget = vscode.workspace.getConfiguration(CONFIG_SECTION);
 
     if (config.provider) {
@@ -1023,8 +1023,18 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     if (config.modelSlots !== undefined) {
       await configTarget.update(`${providerId}.modelSlots`, config.modelSlots, vscode.ConfigurationTarget.Global);
     }
-    // 保存した値を直接 overrides として渡すことで VS Code 設定の反映タイミング問題を回避
-    await this._sendSettingsConfig({ providerOverrides: { [providerId]: config } });
+    // mainModel / mainProvider が同梱されている場合（スロット「使用」ボタン等）も一括で保存
+    if (config.mainModel !== undefined) {
+      await configTarget.update(CONFIG_MAIN_MODEL, config.mainModel, vscode.ConfigurationTarget.Global);
+    }
+    if (config.mainProvider !== undefined) {
+      await configTarget.update(CONFIG_MAIN_PROVIDER, config.mainProvider, vscode.ConfigurationTarget.Global);
+    }
+    // 保存した値をすべて overrides に含めて単一の settingsConfig 送信（並行送信による競合を根本的に排除）
+    const modelOverrides: Record<string, any> = {};
+    if (config.mainModel !== undefined) modelOverrides.mainModel = config.mainModel;
+    if (config.mainProvider !== undefined) modelOverrides.mainProvider = config.mainProvider;
+    await this._sendSettingsConfig({ ...modelOverrides, providerOverrides: { [providerId]: config } });
   }
 
   /** Ollama自動セットアップをwebviewからのリクエストで実行 */

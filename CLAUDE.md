@@ -165,6 +165,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-05-25
+- **OpenRouterモデル保存の完全修正（バージョン 0.2.8）**:
+  - **根本原因**: 「使用」ボタンクリック時に `updateProviderConfig`（openrouter.model保存）と `MSG_UPDATE_MODEL_CONFIG`（mainModel保存）の2つのpostMessageを同時送信していたため、Extension Host側で2ハンドラが並行実行され、それぞれが `settingsConfig` を返す競合が発生。後から返った `settingsConfig` が VS Code config 書き込み完了前に古い値（空）を読んでモデルを上書き消去していた
+  - **`webview/src/App.tsx`**: スロット「使用」ボタンで `model` / `modelSlots` / `mainModel` / `mainProvider` をすべて1つの `updateProviderConfig` メッセージにまとめて送信（2メッセージ並行送信を廃止）
+  - **`src/webview/provider.ts`**: `_handleUpdateProviderConfig` のシグネチャに `mainModel?: string; mainProvider?: string` を追加。全値を一括で VS Code config に保存後、1回の `_sendSettingsConfig` 呼び出しで全 overrides を包含して返信することで競合を根本排除
+
 - **OpenRouterスロット表示消えるバグ根本修正（バージョン 0.2.7）**:
   - **根本原因**: `MSG_SETTINGS_CONFIG` 受信時の `setProviderSettings(initial)` が `modelSlots` を含めていなかったため、サーバーから返信が来るたびに `providerSettings.openrouter.modelSlots` が `undefined` にリセットされスロット表示が消えていた
   - **`webview/src/App.tsx`**: `setProviderSettings(initial)` の初期化ループに `modelSlots: (p as any).modelSlots` を追加

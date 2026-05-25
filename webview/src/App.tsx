@@ -1904,15 +1904,22 @@ function App() {
                                       onClick={() => {
                                         if (slotVal) {
                                           const currentSlots = settings.modelSlots || ['', '', ''];
-                                          updateProvider(p.id, { model: slotVal, modelSlots: currentSlots });
-                                          // model と modelSlots を両方まとめて保存（タイミング問題を回避）
-                                          vscode?.postMessage({ command: 'updateProviderConfig', providerId: p.id, config: { model: slotVal, modelSlots: currentSlots } });
-                                          // メインプロバイダーが openrouter の場合は mainModel も同時更新
                                           const currentMainProvider = serverConfig.mainProvider || serverConfig.provider;
-                                          if (currentMainProvider === p.id) {
+                                          const isMain = currentMainProvider === p.id;
+                                          updateProvider(p.id, { model: slotVal, modelSlots: currentSlots });
+                                          if (isMain) {
                                             setServerConfig(prev => ({ ...prev, mainModel: slotVal }));
-                                            vscode?.postMessage({ command: MSG_UPDATE_MODEL_CONFIG, config: { mainProvider: p.id, mainModel: slotVal } });
                                           }
+                                          // model / modelSlots / mainModel をまとめて1メッセージで送信（並行送信による競合を根本的に排除）
+                                          vscode?.postMessage({
+                                            command: 'updateProviderConfig',
+                                            providerId: p.id,
+                                            config: {
+                                              model: slotVal,
+                                              modelSlots: currentSlots,
+                                              ...(isMain ? { mainModel: slotVal, mainProvider: p.id } : {}),
+                                            },
+                                          });
                                         }
                                       }}
                                       disabled={!slotVal}
