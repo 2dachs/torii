@@ -76,6 +76,8 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private _chatReq: ReturnType<typeof http.request> | null = null;
   private _agentReq: ReturnType<typeof http.request> | null = null;
   private _currentAgentTaskId: string | null = null;
+  // 設定書き込みをシリアル化するキュー（onBlur/onClick 競合によるレース防止）
+  private _configWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(context: vscode.ExtensionContext, port: number, token: string) {
     this._context = context;
@@ -209,7 +211,11 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         await this.clearHistory();
         break;
       case MSG_UPDATE_PROVIDER_CONFIG:
-        await this._handleUpdateProviderConfig(message.providerId, message.config);
+        // 書き込みキューに積んで直列実行（onBlur→onClick の並行発火によるレース防止）
+        this._configWriteQueue = this._configWriteQueue
+          .then(() => this._handleUpdateProviderConfig(message.providerId, message.config))
+          .catch(() => {});
+        await this._configWriteQueue;
         break;
       case MSG_EDITOR_CONTENT:
         await this._sendEditorContent(vscode.window.activeTextEditor);

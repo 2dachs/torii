@@ -148,6 +148,10 @@ function App() {
   const [providerSettings, setProviderSettings] = useState<Record<string, ProviderSettings>>({});
   const [activeProviderTab, setActiveProviderTab] = useState<string>('deepseek');
 
+  // スロット onBlur と「使用」onClick の競合防止用フラグ
+  // onMouseDown（onClick より前に発火）でフラグを立て、onBlur で検知してスキップする
+  const suppressSlotBlurRef = useRef<Record<string, boolean>>({});
+
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
   // ── クイック切替 & 添付 ──
@@ -1894,6 +1898,13 @@ function App() {
                                         updateProvider(p.id, { modelSlots: newSlots });
                                       }}
                                       onBlur={(e) => {
+                                        // 「使用」ボタンのクリックで onBlur が先行発火する場合はスキップ
+                                        // （onMouseDown でフラグを立て、ここで検知する）
+                                        const key = `${p.id}-${i}`;
+                                        if (suppressSlotBlurRef.current[key]) {
+                                          delete suppressSlotBlurRef.current[key];
+                                          return;
+                                        }
                                         const newSlots = [...(settings.modelSlots || ['', '', ''])];
                                         newSlots[i] = e.target.value;
                                         vscode?.postMessage({ command: 'updateProviderConfig', providerId: p.id, config: { modelSlots: newSlots } });
@@ -1901,6 +1912,10 @@ function App() {
                                     />
                                     <button
                                       className={`slot-use-btn${isActive ? ' active' : ''}`}
+                                      onMouseDown={() => {
+                                        // onClick より前に発火し、同スロット入力の onBlur をスキップさせる
+                                        if (slotVal) suppressSlotBlurRef.current[`${p.id}-${i}`] = true;
+                                      }}
                                       onClick={() => {
                                         if (slotVal) {
                                           const currentSlots = settings.modelSlots || ['', '', ''];

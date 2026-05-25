@@ -166,9 +166,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ### 2026-05-25
 - **OpenRouterモデル保存の完全修正（バージョン 0.2.8）**:
-  - **根本原因**: 「使用」ボタンクリック時に `updateProviderConfig`（openrouter.model保存）と `MSG_UPDATE_MODEL_CONFIG`（mainModel保存）の2つのpostMessageを同時送信していたため、Extension Host側で2ハンドラが並行実行され、それぞれが `settingsConfig` を返す競合が発生。後から返った `settingsConfig` が VS Code config 書き込み完了前に古い値（空）を読んでモデルを上書き消去していた
-  - **`webview/src/App.tsx`**: スロット「使用」ボタンで `model` / `modelSlots` / `mainModel` / `mainProvider` をすべて1つの `updateProviderConfig` メッセージにまとめて送信（2メッセージ並行送信を廃止）
-  - **`src/webview/provider.ts`**: `_handleUpdateProviderConfig` のシグネチャに `mainModel?: string; mainProvider?: string` を追加。全値を一括で VS Code config に保存後、1回の `_sendSettingsConfig` 呼び出しで全 overrides を包含して返信することで競合を根本排除
+  - **2層の競合バグを修正**:
+    - **第1層**: 「使用」ボタンクリック時に `updateProviderConfig` と `MSG_UPDATE_MODEL_CONFIG` の2つのpostMessageを同時送信 → 1メッセージに統合（前回修正）
+    - **第2層（今回修正）**: input の `onBlur`（フォーカス外れ）と「使用」ボタンの `onClick` が ほぼ同時に発火し、Extension Host が2つの `updateProviderConfig` を並行処理。onBlur 側のレスポンス（modelSlots のみ・model は VS Code config から stale な値で読み出し）が onClick 側の正しいレスポンスを後から上書きしていた
+  - **`webview/src/App.tsx`**: `suppressSlotBlurRef = useRef<Record<string, boolean>>({})` を追加。「使用」ボタンの `onMouseDown`（onClick より前に発火）でフラグを立て、スロット入力の `onBlur` でフラグを検出してpostMessageをスキップすることで競合を排除
+  - **`src/webview/provider.ts`**: `_configWriteQueue` を追加し、`MSG_UPDATE_PROVIDER_CONFIG` ハンドラをキュー経由で直列実行。たとえ並行してメッセージが届いてもシリアル処理されるため、後続ハンドラは前ハンドラの VS Code config 書き込み完了後に実行される
 
 - **OpenRouterスロット表示消えるバグ根本修正（バージョン 0.2.7）**:
   - **根本原因**: `MSG_SETTINGS_CONFIG` 受信時の `setProviderSettings(initial)` が `modelSlots` を含めていなかったため、サーバーから返信が来るたびに `providerSettings.openrouter.modelSlots` が `undefined` にリセットされスロット表示が消えていた
