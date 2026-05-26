@@ -79,7 +79,7 @@ const PROVIDER_ID_MAP: Record<ProviderId, string> = {
   deepseek: 'deepseek',
   ollama: 'ollama',
   gemini: 'gemini',
-  openrouter: 'openai-native',
+  openrouter: 'openrouter',
 };
 
 // ── <think> タグフィルター（DeepSeek 等の推論タグを非表示） ──
@@ -178,6 +178,7 @@ export async function runAgentLoop(params: AgentParams): Promise<AgentResult> {
     deepseek: 'https://api.deepseek.com/v1',
     gemini: 'https://generativelanguage.googleapis.com/v1beta',
     ollama: 'http://localhost:11434',
+    openrouter: 'https://openrouter.ai/api/v1',
   };
   const clineProviderId = PROVIDER_ID_MAP[providerId] ?? providerId;
   const defaultBase = defaultBaseUrls[clineProviderId] ?? '';

@@ -164,6 +164,12 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ## 修正・変更ログ
 
+### 2026-05-26
+- **OpenRouter Agentモード「Invalid Responses API request」修正**:
+  - **根本原因**: `PROVIDER_ID_MAP['openrouter']` が `'openai-native'` にマッピングされていたため、@cline/agents が @ai-sdk/openai の Responses API（`POST /v1/responses`）を呼び出していた。OpenRouter はこのエンドポイントをサポートしていないためエラーになっていた（チャットモードは `callOpenAICompatible()` で直接 `/chat/completions` を fetch するため問題なし）
+  - **`src/backend/agentLoop.ts`**: `PROVIDER_ID_MAP['openrouter']` を `'openai-native'` → `'openrouter'` に変更。@cline/llms は openrouter を組み込みプロバイダーとして持ち、Chat Completions API を使用する
+  - **`src/backend/agentLoop.ts`**: `defaultBaseUrls` に `openrouter: 'https://openrouter.ai/api/v1'` を追加。`isCustomEndpoint` 判定が正しく機能し、デフォルトエンドポイントでは `baseUrl` を渡さず、カスタムエンドポイントでのみオーバーライドするようになった
+
 ### 2026-05-25
 - **OpenRouterモデル保存の完全修正（バージョン 0.2.8）**:
   - **2層の競合バグを修正**:
