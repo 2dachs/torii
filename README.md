@@ -15,6 +15,15 @@
 
 ---
 
+## スクリーンショット
+
+![ホーム画面](assets/screenshot-home.png)
+![設定画面](assets/screenshot-settings.png)
+![エージェントループ](assets/screenshot-agent.png)
+![コスト管理](assets/screenshot-cost.png)
+
+---
+
 ## 必要環境
 
 - VS Code 1.85 以降
