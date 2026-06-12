@@ -188,7 +188,7 @@ function App() {
   const [inputAreaHeight, setInputAreaHeight] = useState(200);
 
   // ── ライセンス ──
-  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>('trial');
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>('free');
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const [isBeta, setIsBeta] = useState(false);
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(false);
@@ -1139,7 +1139,7 @@ function App() {
                   <>
                     <strong>気に入ってもらえましたか？</strong><br />
                     <span style={{ fontSize: '0.85em', opacity: 0.85 }}>
-                      7日間の無料体験期間が終了しました。引き続きエージェント機能を使うには Proプランへどうぞ。
+                      7日間のPro体験期間が終了しました。引き続きエージェント機能を使うには Proプランへどうぞ。
                     </span>
                   </>
                 ) : (
@@ -1201,7 +1201,7 @@ function App() {
                   <div className="home-pro-cta">
                     <div className="home-pro-badge">β版</div>
                     <div className="home-pro-text">
-                      <strong>β版公開中 — 全機能が無料でご利用いただけます</strong>
+                      <strong>β版公開中 — Pro機能を開放しています</strong>
                       <span>β版終了後: エージェントモード等はPro版（¥980/月）が必要です</span>
                     </div>
                   </div>
@@ -1603,7 +1603,7 @@ function App() {
                   workspace_id: '',
                   task_id: activeTaskId,
                   role: 'system' as const,
-                  content: '🔒 エージェントモードはProプランが必要です。体験期間が終了しました。設定画面からライセンスキーを入力してください。',
+                  content: '🔒 エージェントモードはProプランが必要です。Pro体験期間が終了しました。設定画面からライセンスキーを入力してください。',
                   tokens_used: 0, cost_usd: 0, cost_jpy: 0,
                   created_at: new Date().toISOString(),
                 }]);
@@ -2351,16 +2351,16 @@ function App() {
               <span style={{ marginLeft: 8, fontSize: '0.8em', opacity: 0.7 }}>
                 {licenseStatus === 'valid' ? '✅ Pro'
                   : licenseStatus === 'grace' ? '✅ Pro (猶予中)'
-                  : licenseStatus === 'trial' && isBeta ? '🎉 β版: 全機能無料公開中'
-                  : licenseStatus === 'trial' ? `⏰ 無料体験中（残り${trialDaysRemaining ?? '?'}日）`
-                  : licenseStatus === 'trial_expired' ? '⌛ 体験終了'
+                  : licenseStatus === 'trial' && isBeta ? '🎉 β版: Pro機能開放中'
+                  : licenseStatus === 'trial' ? `⏰ Pro体験期間（残り${trialDaysRemaining ?? '?'}日）`
+                  : licenseStatus === 'trial_expired' ? '⌛ Pro体験終了'
                   : '🔓 Free'}
               </span>
             </div>
             {licenseStatus === 'trial' && isBeta && (
               <div className="license-panel">
                 <div className="license-cta-text">
-                  🎉 <strong>β版公開中</strong> — エージェントモードを含む全Pro機能が<strong>無料</strong>でご利用いただけます。<br /><br />
+                  🎉 <strong>β版公開中</strong> — エージェントモードを含むPro機能を開放しています。<br /><br />
                   β版終了後は、エージェントモード・ストリーミングなどのPro機能は <strong>¥980/月</strong> のProプランが必要になります。
                 </div>
               </div>
@@ -2368,8 +2368,8 @@ function App() {
             {licenseStatus === 'trial' && !isBeta && (
               <div className="license-panel">
                 <div className="license-cta-text">
-                  ⏰ <strong>無料体験期間中</strong>（残り{trialDaysRemaining ?? '?'}日）<br />
-                  全Pro機能をお使いいただけます。体験後は¥980/月で継続できます。
+                  ⏰ <strong>Pro体験期間</strong>（残り{trialDaysRemaining ?? '?'}日）<br />
+                  期間中はPro機能をお使いいただけます。継続利用は¥980/月です。
                 </div>
                 <button className="btn btn-secondary" style={{ marginTop: 6 }}
                   onClick={() => vscode?.postMessage({ command: 'upgradePro' })}>

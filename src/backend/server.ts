@@ -1036,7 +1036,7 @@ ${chatTree}${chatEditorSection}
     try {
       const licenseStatus = await licenseManager.getStatus(context);
       if (licenseStatus !== 'valid' && licenseStatus !== 'grace' && licenseStatus !== 'trial') {
-        sendEvent({ type: 'error', message: '⚠️ エージェントモードはProプランまたは無料体験期間中のみ使用できます。' });
+        sendEvent({ type: 'error', message: '⚠️ エージェントモードはProプランまたはPro体験期間中のみ使用できます。' });
         res.end();
         return;
       }

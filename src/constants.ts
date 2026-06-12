@@ -5,7 +5,7 @@ export const EXTENSION_DESCRIPTION = 'Japanese-first AI coding agent with cost t
 
 // ── ライセンス ──
 export type LicenseStatus = 'valid' | 'trial' | 'trial_expired' | 'free' | 'expired' | 'invalid' | 'grace';
-export const LEMONSQUEEZY_CHECKOUT_URL = 'https://torii-dev.lemonsqueezy.com/buy/1679529';
+export const LEMONSQUEEZY_CHECKOUT_URL = 'https://torii-dev.lemonsqueezy.com/checkout/buy/e01fc9a8-b44c-4664-92d7-21a0176170f7';
 export const FREE_TRIAL_DAYS = 7;
 
 // ── Views ──

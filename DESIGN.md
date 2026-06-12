@@ -44,7 +44,7 @@
 - チャットモード（会話型）
 - APIキー管理（VS Code SecretStorage）
 
-#### Pro（¥980/月・7日間無料トライアル）
+#### Pro（¥980/月・7日間Pro体験）
 - **エージェントループ**（ファイル操作・コマンド実行・自律タスク）
 - ストリーミング応答（逐次表示）
 - ファイル自動編集（diff表示 → Apply）
@@ -286,8 +286,8 @@ await licenseManager.activate(context, inputKey);
 ```typescript
 type LicenseStatus =
   | 'valid'          // アクティブなPro
-  | 'trial'          // 7日間無料トライアル中
-  | 'trial_expired'  // トライアル期限切れ（未購入）
+  | 'trial'          // 7日間Pro体験期間中
+  | 'trial_expired'  // Pro体験期限切れ（未購入）
   | 'free'           // 未登録（無料版）
   | 'expired'        // サブスクリプション期限切れ
   | 'invalid'        // 無効なキー
@@ -298,7 +298,7 @@ type LicenseStatus =
 ```typescript
 // エージェント機能の起動前チェック
 const license = getLicenseStatus(context);
-if (license !== 'valid' && license !== 'grace') {
+if (license !== 'valid' && license !== 'grace' && license !== 'trial') {
   // ProアップグレードへのCTAを表示
   return;
 }
@@ -326,7 +326,7 @@ if (license !== 'valid' && license !== 'grace') {
 - [ ] 予算バー計算のリファクタリング（文字列パース廃止）— 継続課題
 
 ### v0.4.0（Marketplace公開）— **進行中**
-- [ ] Stripe審査完了確認
+- [x] Stripe審査完了確認
 - [ ] アイコン差し替え（resources/icon.png）
 - [ ] vsce package・publish
 - [ ] VSCode Marketplaceパブリッシャー登録（publisher: pettal）

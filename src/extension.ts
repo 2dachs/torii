@@ -122,12 +122,12 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // 無料体験期間: 初回起動日時を記録（べき等）
+  // Pro体験期間: 初回起動日時を記録（べき等）
   await licenseManager.initFreeTrial(context);
 
   // ライセンス起動時チェック（バックグラウンド）
   licenseManager.check(context).then(async (status) => {
-    updateLicenseBadge(context, status);
+    await updateLicenseBadge(context, status);
     const trialDaysRemaining = await licenseManager.getTrialDaysRemaining(context);
     provider?.sendLicenseStatus(status, trialDaysRemaining);
   }).catch((err) => {
@@ -135,16 +135,6 @@ export async function activate(context: vscode.ExtensionContext) {
     console.error('[Torii] License check failed:', err);
     provider?.sendLicenseStatus('free', null);
   });
-
-  // β期間中の告知（Pro機能は無料で使用可能）
-  const betaNoticeKey = 'pettalBetaNoticeShown';
-  const alreadyShown = context.globalState.get<boolean>(betaNoticeKey);
-  if (!alreadyShown) {
-    vscode.window.showInformationMessage(
-      '🎉 Torii β版へようこそ！β期間中はエージェントループを含むPro機能がすべて無料でご利用いただけます。現在はmacOSを優先サポートしています。Windowsは今後対応予定です。',
-    );
-    context.globalState.update(betaNoticeKey, true);
-  }
 
   console.log('[Torii] Extension activated successfully');
 }

@@ -13,8 +13,8 @@ const CACHE_TTL_MS    = 24 * 60 * 60 * 1000;             // 24時間キャッシ
 const GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;         // オフライン猶予7日
 const TRIAL_MS        = FREE_TRIAL_DAYS * 24 * 60 * 60 * 1000;
 
-// ベータ期間フラグ: LemonSqueezy審査完了後に false に戻す
-export const BETA_FREE_PRO = true;
+// LemonSqueezy審査通過後は通常の7日間Pro体験 + Proライセンス判定で運用する
+export const BETA_FREE_PRO = false;
 
 // SecretStorage への数値読み書きヘルパー
 async function getSecretNum(ctx: vscode.ExtensionContext, key: string): Promise<number> {
@@ -38,7 +38,7 @@ export async function initFreeTrial(context: vscode.ExtensionContext): Promise<v
   }
 }
 
-/** 無料体験の残り日数を返す（0以下 = 期限切れ、null = ライセンス済みユーザー） */
+/** Pro体験の残り日数を返す（0以下 = 期限切れ、null = ライセンス済みユーザー） */
 export async function getTrialDaysRemaining(context: vscode.ExtensionContext): Promise<number | null> {
   const installDate = await getSecretNum(context, SECRET_INSTALL_DATE);
   if (!installDate) return null;
@@ -61,7 +61,7 @@ export async function getStatus(context: vscode.ExtensionContext): Promise<Licen
     return 'expired';
   }
 
-  // ── ライセンスなし → 無料体験期間チェック ──
+  // ── ライセンスなし → Pro体験期間チェック ──
   const installDate = await getSecretNum(context, SECRET_INSTALL_DATE);
   if (!installDate) return 'free'; // initFreeTrial 未呼び出し（通常は起こらない）
 
@@ -76,13 +76,13 @@ export async function getStatus(context: vscode.ExtensionContext): Promise<Licen
 
 /**
  * 起動時チェック: ライセンスキーがあればネットワーク検証してキャッシュを更新。
- * ライセンスがない場合は体験期間ステータスを返す。
+ * ライセンスがない場合はPro体験期間ステータスを返す。
  */
 export async function check(context: vscode.ExtensionContext): Promise<LicenseStatus> {
   if (BETA_FREE_PRO) return 'trial';
   const key = await context.secrets.get(SECRET_LICENSE_KEY);
   if (!key) {
-    // ライセンスなし → 体験期間ステータス
+    // ライセンスなし → Pro体験期間ステータス
     const installDate = await getSecretNum(context, SECRET_INSTALL_DATE);
     if (!installDate) return 'free';
     const now = Date.now();

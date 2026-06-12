@@ -266,6 +266,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         await this._handleEscalate(message);
         break;
       case 'upgradePro':
+      case 'torii.upgradePro':
         vscode.commands.executeCommand('torii.upgradePro');
         break;
       case MSG_CANCEL_REQUEST:
@@ -1086,8 +1087,9 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     const result = await licenseManager.activate(this._context, key);
     if (result.ok) {
       const newStatus = await licenseManager.getStatus(this._context);
-      updateLicenseBadge(this._context, newStatus);
-      this.sendLicenseStatus(newStatus);
+      const trialDaysRemaining = await licenseManager.getTrialDaysRemaining(this._context);
+      await updateLicenseBadge(this._context, newStatus);
+      this.sendLicenseStatus(newStatus, trialDaysRemaining);
     }
     this._view.webview.postMessage({ command: 'licenseActivateResult', ok: result.ok, message: result.message });
   }

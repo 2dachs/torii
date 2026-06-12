@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { getGlobalMonthlyBudget } from './storage';
 import { EXTENSION_DISPLAY_NAME, DEFAULT_EXCHANGE_RATE } from '../constants';
 import type { LicenseStatus } from '../constants';
+import { getTrialDaysRemaining } from './licenseManager';
 
 let statusBarItem: vscode.StatusBarItem | undefined;
 let licenseBarItem: vscode.StatusBarItem | undefined;
@@ -22,7 +23,7 @@ export function registerStatusBar(context: vscode.ExtensionContext): void {
   );
   licenseBarItem.name = `${EXTENSION_DISPLAY_NAME} License`;
   licenseBarItem.text = '$(unlock) Free';
-  licenseBarItem.tooltip = 'Torii: Freeプラン（β期間中はPro機能が無料） — クリックでアップグレード';
+  licenseBarItem.tooltip = 'Torii: Freeプラン — クリックでアップグレード';
   licenseBarItem.command = 'torii.upgradePro';
   context.subscriptions.push(licenseBarItem);
   licenseBarItem.show();
@@ -47,7 +48,7 @@ export async function updateBudgetDisplay(context: vscode.ExtensionContext): Pro
   }
 }
 
-export function updateLicenseBadge(context: vscode.ExtensionContext, status: LicenseStatus): void {
+export async function updateLicenseBadge(context: vscode.ExtensionContext, status: LicenseStatus): Promise<void> {
   if (!licenseBarItem) return;
 
   switch (status) {
@@ -62,18 +63,16 @@ export function updateLicenseBadge(context: vscode.ExtensionContext, status: Lic
       licenseBarItem.command = 'torii.openSettings';
       break;
     case 'trial': {
-      // 残り日数を計算して表示
-      const installDate = context.globalState.get<number>('torii_install_date', Date.now());
-      const msLeft = installDate + 7 * 24 * 60 * 60 * 1000 - Date.now();
-      const daysLeft = Math.max(1, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
-      licenseBarItem.text = `$(clock) 体験 残${daysLeft}日`;
-      licenseBarItem.tooltip = `Torii: 無料体験期間中（残り${daysLeft}日）。クリックでProプランへ。`;
+      const trialDaysRemaining = await getTrialDaysRemaining(context);
+      const daysLeft = Math.max(1, trialDaysRemaining ?? 1);
+      licenseBarItem.text = `$(clock) Pro体験 残${daysLeft}日`;
+      licenseBarItem.tooltip = `Torii: Pro体験期間中（残り${daysLeft}日）。クリックでProプランへ。`;
       licenseBarItem.command = 'torii.upgradePro';
       break;
     }
     case 'trial_expired':
-      licenseBarItem.text = '$(star-empty) 体験終了';
-      licenseBarItem.tooltip = 'Torii: 無料体験期間が終了しました — クリックしてProプランへ';
+      licenseBarItem.text = '$(star-empty) Pro体験終了';
+      licenseBarItem.tooltip = 'Torii: Pro体験期間が終了しました — クリックしてProプランへ';
       licenseBarItem.command = 'torii.upgradePro';
       break;
     case 'expired':

@@ -110,9 +110,9 @@ VS Code の設定（`settings.json`）に追加することで、任意のキー
 
 エージェントループ機能（ファイル書き込み・コマンド実行・自律タスク）にはProライセンスが必要です。
 
-**7日間無料トライアル付き** — クレジットカード不要でお試しいただけます。
+**7日間のPro体験付き** — クレジットカード不要でお試しいただけます。
 
-[👉 Proライセンスを取得する](https://torii-dev.lemonsqueezy.com/buy/1679529)
+[👉 Proライセンスを取得する](https://torii-dev.lemonsqueezy.com/checkout/buy/e01fc9a8-b44c-4664-92d7-21a0176170f7)
 
 ---
 
@@ -176,9 +176,9 @@ Then set the sub-provider to `Ollama` in Torii settings and enable auto-routing.
 
 Agent loop features (file write, command execution, autonomous tasks) require a Pro license.
 
-**7-day free trial** — no credit card required to start.
+**7-day Pro trial** — no credit card required to start.
 
-[👉 Get Pro License](https://torii-dev.lemonsqueezy.com/buy/1679529)
+[👉 Get Pro License](https://torii-dev.lemonsqueezy.com/checkout/buy/e01fc9a8-b44c-4664-92d7-21a0176170f7)
 
 ## Support
 

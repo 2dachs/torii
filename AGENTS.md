@@ -1,14 +1,14 @@
-# Torii — Claude Code 行動指針
+# Torii — Codex 行動指針
 
 ## ドキュメント更新の原則
 
 **コードを変更したら、関連ドキュメントを必ず同時に更新する。**
 
 - 機能追加・修正・設定変更を行ったら、以下を確認して必要箇所を更新する：
-  - `CLAUDE.md` — 実装済み機能リスト、既知の課題テーブル、変更ログ
+  - `AGENTS.md` — 実装済み機能リスト、既知の課題テーブル、変更ログ
   - `DESIGN.md` — 実装状態（v0.x.x）、既知の問題テーブル、ロードマップのチェックボックス
   - `README.md` — 機能一覧に変化がある場合のみ
-- 変更ログは `CLAUDE.md` の「修正・変更ログ」に日付付きで追記する
+- 変更ログは `AGENTS.md` の「修正・変更ログ」に日付付きで追記する
 - 指示されなくても行う。コード変更とドキュメント更新は一体のタスク
 
 ---
@@ -19,7 +19,7 @@
 
 - ファイルが存在するか不明 → `find` / `grep` で探してから答える（「存在しないかもしれない」は禁止）
 - パスが曖昧 → `find . -name "*.tsx" -iname "*keyword*"` で確認する
-- CLAUDE.mdに書いていないことも、コードを読んで自分で把握する
+- AGENTS.mdに書いていないことも、コードを読んで自分で把握する
 - 「お手数ですが教えていただけますか」は、コードを見ても本当にわからない時だけ
 
 ---
@@ -286,7 +286,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ### 2026-05-22 (4)
 - **VSIX起動エラー修正（`import.meta.url` が `undefined`）**: esbuild がESMパッケージをCJSバンドルに変換する際に `import.meta` を `{}` にポリフィルするため `import.meta.url = undefined` となり `createRequire(undefined)` が失敗していた。`package.json` の `compile` / `watch` スクリプトに `--define:import.meta.url=__importMetaUrl` と `--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;` を追加して解決。
-  - 根本チェーン: `@cline/agents` → `@cline/llms` → `ai-sdk-provider-claude-code` → `@anthropic-ai/claude-agent-sdk/sdk.mjs` (uses `import.meta.url`)
+  - 根本チェーン: `@cline/agents` → `@cline/llms` → `ai-sdk-provider-Codex` → `@anthropic-ai/Codex-agent-sdk/sdk.mjs` (uses `import.meta.url`)
   - 開発時は `new Function(...)` ハック除去（v0.1.4）により esbuild がバンドル対象にしたことで初めて顕在化
 
 ### 2026-05-22 (3)
@@ -307,7 +307,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - **セキュリティ強化**: `server.ts` の `console.error` 2箇所を修正
   - API エラーメッセージを500文字でトリム（レスポンスボディ由来の情報漏洩防止）
   - Chat エラーのログを `err` オブジェクト全体から `err.message` のみに変更
-- **CLAUDE.md**: ドキュメント更新の原則を追加
+- **AGENTS.md**: ドキュメント更新の原則を追加
 
 ### 2026-05-19
 - **タスクリストのレスポンシブ化**: `clamp()`/`vw`を使い、パネル幅に応じてタスク名・ボタンが拡大するよう変更
@@ -354,7 +354,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - プロダクト名：Torii（旧称: Pettal Practitioner）
 - Marketplace ID：pettal.torii
 - 将来的にPettalの事業のひとつとして統合予定
-- ターゲット：Claude Pro + Cursorを使っている日本人個人開発者
+- ターゲット：Codex Pro + Cursorを使っている日本人個人開発者
 - ビジョン：AIコーディングの入口であり、いろんなプロバイダーやモデルへのゲートウェイ
 - 価格：¥980/月・7日間Pro体験
 - ライセンス：MIT（完全OSS公開）
