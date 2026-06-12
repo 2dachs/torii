@@ -1008,9 +1008,11 @@ ${chatTree}${chatEditorSection}
 
     // タスク未指定なら自動作成
     let taskId: string | null = req.body.taskId || null;
+    let autoCreatedTaskId: string | null = null;
     if (!taskId) {
       const newTask = await createTask(workspaceId, generateTaskTitle(message));
       taskId = newTask.id;
+      autoCreatedTaskId = newTask.id;
     }
 
     // SSE ヘッダー
@@ -1024,6 +1026,10 @@ ${chatTree}${chatEditorSection}
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       }
     };
+
+    if (autoCreatedTaskId) {
+      sendEvent({ type: 'task_created', taskId: autoCreatedTaskId });
+    }
 
     const abortController = new AbortController();
     activeAgentControllers.set(taskId!, abortController);

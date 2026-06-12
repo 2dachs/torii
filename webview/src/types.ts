@@ -217,6 +217,7 @@ export type LicenseStatus = 'valid' | 'trial' | 'trial_expired' | 'free' | 'expi
 
 /** エージェントイベント（server → provider.ts → Webview） */
 export type AgentEvent =
+  | { type: 'task_created'; taskId: string }
   | { type: 'thinking_start'; iteration: number }
   | { type: 'text_delta'; text: string }
   | { type: 'tool_use'; id: string; tool: string; input: Record<string, unknown> }

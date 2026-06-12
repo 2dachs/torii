@@ -435,7 +435,11 @@ function App() {
           const evt = msg.event as AgentEvent;
           if (!evt) break;
           setAgentSteps((prev) => [...prev, evt]);
-          if (evt.type === 'thinking_start') {
+          if (evt.type === 'task_created') {
+            isNewChatModeRef.current = false;
+            setActiveTaskId(evt.taskId);
+            vscode?.postMessage({ command: 'loadTasks' });
+          } else if (evt.type === 'thinking_start') {
             setAgentPhase('thinking');
             setCurrentToolName(null);
           } else if (evt.type === 'text_delta') {

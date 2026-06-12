@@ -7,6 +7,7 @@ import { buildSystemPrompt, buildClineTools } from './tools';
 // ── イベント型（Extension Host → Webview へ転送される） ──
 
 export type AgentEvent =
+  | { type: 'task_created'; taskId: string }
   | { type: 'thinking_start'; iteration: number }
   | { type: 'text_delta'; text: string }
   | { type: 'tool_use'; id: string; tool: string; input: Record<string, unknown> }
