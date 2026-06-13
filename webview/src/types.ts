@@ -225,6 +225,8 @@ export type AgentEvent =
   | { type: 'approval_required'; id: string; tool: 'run_command'; data: { command: string } }
   | { type: 'approval_required'; id: string; tool: 'write_file'; data: { path: string; oldContent: string; newContent: string } }
   | { type: 'approval_required'; id: string; tool: string; data: Record<string, unknown> }
+  | { type: 'file_change_applied'; undoId: string; path: string; action: 'create' | 'update' }
+  | { type: 'file_change_undone'; undoId: string; path: string; ok: boolean; message: string }
   | { type: 'privacy_notice'; message: string }
   | { type: 'context_warning'; message: string }
   | { type: 'model_info'; providerId: string; modelName: string; isLocal: boolean }

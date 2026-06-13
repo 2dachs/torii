@@ -30,6 +30,7 @@ import {
   MSG_WRITE_FILE,
   MSG_FILE_CONTENTS,
   MSG_AGENT_APPROVE,
+  MSG_UNDO_FILE_CHANGE,
   MSG_UPDATE_MODEL_CONFIG,
   MSG_LOAD_ROUTING_RULES,
   MSG_SAVE_ROUTING_RULE,
@@ -186,6 +187,9 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         break;
       case MSG_AGENT_APPROVE:
         await this._handleAgentApprove(message.id, message.approved);
+        break;
+      case MSG_UNDO_FILE_CHANGE:
+        await this._handleUndoFileChange(message.undoId);
         break;
       case MSG_SETUP_OLLAMA:
         await this._handleSetupOllama();
@@ -802,6 +806,71 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         res.on('end', resolve);
       });
       req.on('error', resolve);
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  private async _handleUndoFileChange(undoId: string) {
+    if (!undoId) return;
+    const payload = JSON.stringify({ undoId });
+    const options = {
+      hostname: 'localhost',
+      port: this._port,
+      path: '/api/file-change/undo',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'x-torii-token': this._token,
+      },
+    };
+
+    await new Promise<void>((resolve) => {
+      const req = http.request(options, (res: any) => {
+        let body = '';
+        res.on('data', (chunk: Buffer) => (body += chunk.toString()));
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(body);
+            this._view?.webview.postMessage({
+              command: 'agentEvent',
+              event: {
+                type: 'file_change_undone',
+                undoId,
+                path: result.path || '',
+                ok: !!result.ok,
+                message: result.message || result.error || '元に戻せませんでした',
+              },
+            });
+          } catch {
+            this._view?.webview.postMessage({
+              command: 'agentEvent',
+              event: {
+                type: 'file_change_undone',
+                undoId,
+                path: '',
+                ok: false,
+                message: '元に戻す結果の解析に失敗しました',
+              },
+            });
+          }
+          resolve();
+        });
+      });
+      req.on('error', (e: Error) => {
+        this._view?.webview.postMessage({
+          command: 'agentEvent',
+          event: {
+            type: 'file_change_undone',
+            undoId,
+            path: '',
+            ok: false,
+            message: `通信エラー: ${e.message}`,
+          },
+        });
+        resolve();
+      });
       req.write(payload);
       req.end();
     });

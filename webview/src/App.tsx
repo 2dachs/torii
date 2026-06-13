@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
-import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS } from '../../src/constants';
+import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS } from '../../src/constants';
 
 const vscode = acquireVsCodeApi?.();
 
@@ -359,7 +359,7 @@ function App() {
           setStreamingText('');
           setAgentPhase(null);
           setCurrentToolName(null);
-          setAgentSteps([]);
+          setAgentSteps((prev) => prev.filter(e => e.type === 'file_change_applied' || e.type === 'file_change_undone'));
           break;
         case 'secretSaved':
           if (msg.key) {
@@ -485,7 +485,7 @@ function App() {
               ]);
               return '';
             });
-            setAgentSteps([]);
+            setAgentSteps((prev) => prev.filter(e => e.type === 'file_change_applied' || e.type === 'file_change_undone'));
             setAgentPhase(null);
             setCurrentToolName(null);
             setCurrentToolInput({});
@@ -521,7 +521,7 @@ function App() {
               },
             ]);
             setStreamingText('');
-            setAgentSteps([]);
+            setAgentSteps((prev) => prev.filter(e => e.type === 'file_change_applied' || e.type === 'file_change_undone'));
             setAgentPhase(null);
             setCurrentToolName(null);
             setCurrentToolInput({});
@@ -828,6 +828,10 @@ function App() {
   const handleApprove = useCallback((id: string, approved: boolean) => {
     setPendingApprovals((prev) => prev.filter((p) => p.id !== id));
     vscode?.postMessage({ command: MSG_AGENT_APPROVE, id, approved });
+  }, []);
+
+  const handleUndoFileChange = useCallback((undoId: string) => {
+    vscode?.postMessage({ command: MSG_UNDO_FILE_CHANGE, undoId });
   }, []);
 
   // ── 新しいチャット開始 ──
@@ -1351,10 +1355,10 @@ function App() {
           </div>
         ))}
         {/* ── エージェントモード: ストリーミングテキスト + ステップ表示 ── */}
-        {loading && agentMode === 'agent' && (
+        {agentMode === 'agent' && (loading || agentSteps.some(e => e.type === 'file_change_applied' || e.type === 'file_change_undone')) && (
           <div className="agent-progress">
             {/* フェーズインジケーター */}
-            {(() => {
+            {loading && (() => {
               const toolCat = TOOL_CATEGORIES[currentToolName || ''];
               const isGit = currentToolName === 'run_command' && /git/.test((currentToolInput.command as string) || '');
               const effCat = isGit ? 'git' : (toolCat || 'default');
@@ -1383,7 +1387,7 @@ function App() {
               );
             })()}
             {/* ツールステップ一覧 */}
-            {agentSteps.filter(e => e.type === 'tool_use' || e.type === 'tool_result').map((evt, i) => {
+            {agentSteps.filter(e => e.type === 'tool_use' || e.type === 'tool_result' || e.type === 'file_change_applied' || e.type === 'file_change_undone').map((evt, i) => {
               if (evt.type === 'tool_use') {
                 return (
                   <div key={i} className="agent-step tool-use">
@@ -1403,6 +1407,30 @@ function App() {
                   <div key={i} className={`agent-step tool-result ${evt.ok ? 'ok' : 'error'}`}>
                     <span className="step-icon">{evt.ok ? '✅' : '❌'}</span>
                     <span className="step-label">{TOOL_JAPANESE_NAMES[evt.tool] || evt.tool} 完了</span>
+                  </div>
+                );
+              }
+              if (evt.type === 'file_change_applied') {
+                const undoResult = agentSteps.find(e => e.type === 'file_change_undone' && e.undoId === evt.undoId);
+                return (
+                  <div key={i} className="agent-step tool-result ok">
+                    <span className="step-icon">↩</span>
+                    <span className="step-label">{evt.path} を変更しました</span>
+                    <button
+                      className="inline-action-btn"
+                      disabled={!!undoResult}
+                      onClick={() => handleUndoFileChange(evt.undoId)}
+                    >
+                      {undoResult ? '元に戻し済み' : '元に戻す'}
+                    </button>
+                  </div>
+                );
+              }
+              if (evt.type === 'file_change_undone') {
+                return (
+                  <div key={i} className={`agent-step tool-result ${evt.ok ? 'ok' : 'error'}`}>
+                    <span className="step-icon">{evt.ok ? '↩' : '❌'}</span>
+                    <span className="step-label">{evt.message}</span>
                   </div>
                 );
               }

@@ -1673,6 +1673,8 @@ body,
   font-family: 'SF Mono', monospace;
   font-size: 10px;
   color: var(--accent);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .step-detail {
   color: var(--text-secondary);
@@ -1681,6 +1683,28 @@ body,
   white-space: nowrap;
   max-width: 200px;
 }
+
+.inline-action-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.inline-action-btn:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.inline-action-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .agent-streaming-text {
   margin-top: 4px;
   padding: 8px;

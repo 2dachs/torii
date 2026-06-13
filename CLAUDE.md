@@ -171,6 +171,8 @@ npm run vscode:prepublish  # 両方まとめてビルド
   - **`src/backend/server.ts` / `webview/src/App.tsx` / `webview/src/types.ts`**: Agentモードで自動作成したタスクIDをSSEでWebviewへ同期し、次送信で別タスクが作られる問題を修正
   - **`package.json` / `package-lock.json`**: VSIX配布用にバージョンを `0.3.2` へ更新
   - **配布物**: `torii-0.3.2.vsix` を作成済み
+- **Agentファイル変更Undo導線を追加**:
+  - **`src/backend/tools.ts` / `src/backend/server.ts` / `src/webview/provider.ts` / `webview/src/App.tsx`**: Agentの `write_file` / `replace_in_file` 適用時に旧内容checkpointを保存し、進捗UIの「元に戻す」ボタンから復元できるよう対応
 
 ### 2026-06-12
 - **Proプラン本番運用への切り替え**:

@@ -14,6 +14,56 @@ function getOutputChannel(): vscode.OutputChannel {
   return _outputChannel;
 }
 
+interface FileCheckpoint {
+  id: string;
+  path: string;
+  absPath: string;
+  oldContent: string;
+  existed: boolean;
+  createdAt: number;
+  undone: boolean;
+}
+
+const fileCheckpoints = new Map<string, FileCheckpoint>();
+
+function recordFileCheckpoint(pathLabel: string, absPath: string, oldContent: string, existed: boolean): FileCheckpoint {
+  const checkpoint: FileCheckpoint = {
+    id: uuidv4(),
+    path: pathLabel,
+    absPath,
+    oldContent,
+    existed,
+    createdAt: Date.now(),
+    undone: false,
+  };
+  fileCheckpoints.set(checkpoint.id, checkpoint);
+  return checkpoint;
+}
+
+export async function undoFileCheckpoint(id: string): Promise<{ path: string; message: string }> {
+  const checkpoint = fileCheckpoints.get(id);
+  if (!checkpoint) {
+    throw new Error('元に戻す対象が見つかりません');
+  }
+  if (checkpoint.undone) {
+    return { path: checkpoint.path, message: `${checkpoint.path} は既に元に戻されています。` };
+  }
+
+  if (checkpoint.existed) {
+    fs.writeFileSync(checkpoint.absPath, checkpoint.oldContent, 'utf-8');
+    checkpoint.undone = true;
+    return { path: checkpoint.path, message: `${checkpoint.path} を変更前の内容に戻しました。` };
+  }
+
+  try {
+    fs.unlinkSync(checkpoint.absPath);
+  } catch (err: any) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  checkpoint.undone = true;
+  return { path: checkpoint.path, message: `${checkpoint.path} を削除して新規作成前の状態に戻しました。` };
+}
+
 // ── ワークスペースツリー生成 ──
 
 export const SKIP_DIRS = new Set([
@@ -158,6 +208,7 @@ ${tree}${editorSection}
 
 type ToolOnEvent = (event:
   | { type: 'approval_required'; id: string; tool: string; data: Record<string, unknown> }
+  | { type: 'file_change_applied'; undoId: string; path: string; action: 'create' | 'update' }
   | { type: 'text_delta'; text: string }
 ) => void;
 
@@ -294,6 +345,7 @@ export async function buildClineTools(
         fileWriteCountMap.set(fp, count + 1);
 
         const absPath = resolvePath(fp);
+        const existed = fs.existsSync(absPath);
         let oldContent = '';
         try { oldContent = fs.readFileSync(absPath, 'utf-8'); } catch { /* 新規ファイル */ }
 
@@ -309,6 +361,13 @@ export async function buildClineTools(
         try {
           fs.mkdirSync(path.dirname(absPath), { recursive: true });
           fs.writeFileSync(absPath, input.content, 'utf-8');
+          const checkpoint = recordFileCheckpoint(fp, absPath, oldContent, existed);
+          onEvent({
+            type: 'file_change_applied',
+            undoId: checkpoint.id,
+            path: fp,
+            action: existed ? 'update' : 'create',
+          });
           readFileCache.delete(fp);
           return `${fp} を書き込みました。`;
         } catch (err: any) {
@@ -381,6 +440,13 @@ export async function buildClineTools(
 
         try {
           fs.writeFileSync(absPath, newContent, 'utf-8');
+          const checkpoint = recordFileCheckpoint(fp, absPath, oldContent, true);
+          onEvent({
+            type: 'file_change_applied',
+            undoId: checkpoint.id,
+            path: fp,
+            action: 'update',
+          });
           readFileCache.delete(fp);
           return `${fp} を更新しました（${pairs.length}箇所置換）。`;
         } catch (err: any) {

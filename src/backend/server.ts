@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import express from 'express';
 import { createServer } from 'http';
 import portfinder from 'portfinder';
-import { buildWorkspaceTree } from './tools';
+import { buildWorkspaceTree, undoFileCheckpoint } from './tools';
 import { saveChatMessage, getChatHistory, createTask, getMonthlyBudget, getGlobalMonthlyBudget, getModelUsageThisMonth, getAllModelUsageThisMonth } from './storage';
 import { getSecretsManager } from './secretsManager';
 import { isCommandSafe } from './commandGuard';
@@ -1209,6 +1209,21 @@ ${chatTree}${chatEditorSection}
       activeAgentControllers.delete(taskId!);
     }
     res.json({ ok: !!ctrl });
+  });
+
+  // POST /api/file-change/undo - エージェントが適用したファイル変更を元に戻す
+  app.post('/api/file-change/undo', async (req, res) => {
+    try {
+      const { undoId } = req.body as { undoId?: string };
+      if (!undoId) {
+        res.status(400).json({ error: 'undoId は必須です' });
+        return;
+      }
+      const result = await undoFileCheckpoint(undoId);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message || '元に戻せませんでした' });
+    }
   });
 
   // GET /api/health - ヘルスチェック

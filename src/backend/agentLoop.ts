@@ -13,6 +13,8 @@ export type AgentEvent =
   | { type: 'tool_use'; id: string; tool: string; input: Record<string, unknown> }
   | { type: 'tool_result'; id: string; tool: string; ok: boolean; output: string }
   | { type: 'approval_required'; id: string; tool: string; data: Record<string, unknown> }
+  | { type: 'file_change_applied'; undoId: string; path: string; action: 'create' | 'update' }
+  | { type: 'file_change_undone'; undoId: string; path: string; ok: boolean; message: string }
   | { type: 'privacy_notice'; message: string }
   | { type: 'context_warning'; message: string }
   | { type: 'model_info'; providerId: string; modelName: string; isLocal: boolean }
