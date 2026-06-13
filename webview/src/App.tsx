@@ -1512,6 +1512,8 @@ function App() {
       {messages.length > 0 && !loading && messages[messages.length - 1]?.role === 'assistant' && (() => {
         const slot1Model = serverConfig.providers.flatMap(p => p.models).find(m => m.id === serverConfig.escalateModel1);
         const slot2Model = serverConfig.providers.flatMap(p => p.models).find(m => m.id === serverConfig.escalateModel2);
+        const slot1Label = slot1Model?.name || serverConfig.escalateModel1 || 'Flash';
+        const slot2Label = slot2Model?.name || serverConfig.escalateModel2 || 'Opus';
         return (
           <div className="escalation-bar">
             <span className="escalation-label">上位モデルで再実行:</span>
@@ -1519,17 +1521,17 @@ function App() {
               className="escalation-btn"
               onClick={() => handleEscalate(1)}
               disabled={escalationLoading}
-              title={slot1Model ? `${slot1Model.name} で再実行` : 'Flash tierモデルで再実行（設定から変更可）'}
+              title={slot1Label !== 'Flash' ? `${slot1Label} で再実行` : 'Flash tierモデルで再実行（設定から変更可）'}
             >
-              ⚡ {slot1Model?.name || 'Flash'}
+              ⚡ {slot1Label}
             </button>
             <button
               className="escalation-btn escalation-opus"
               onClick={() => handleEscalate(2)}
               disabled={escalationLoading}
-              title={slot2Model ? `${slot2Model.name} で再実行` : 'Opus/Pro tierモデルで再実行（設定から変更可）'}
+              title={slot2Label !== 'Opus' ? `${slot2Label} で再実行` : 'Opus/Pro tierモデルで再実行（設定から変更可）'}
             >
-              🔮 {slot2Model?.name || 'Opus'}
+              🔮 {slot2Label}
             </button>
             {escalationLoading && <span className="escalation-loading">再実行中…</span>}
           </div>
@@ -2027,6 +2029,7 @@ function App() {
               const draftPid = slot === 1 ? escalateDraft.p1 : escalateDraft.p2;
               const draftMid = slot === 1 ? escalateDraft.m1 : escalateDraft.m2;
               const providerModels = serverConfig.providers.find(p => p.id === draftPid)?.models || [];
+              const isOpenRouterEscalate = draftPid === 'openrouter';
               const isSaved = escalateSavedSlot === slot;
               return (
                 <div key={slot} className="settings-field">
@@ -2037,7 +2040,10 @@ function App() {
                       value={draftPid}
                       onChange={(e) => {
                         const pid = e.target.value;
-                        const firstModel = serverConfig.providers.find(p => p.id === pid)?.models[0]?.id || '';
+                        const selectedProvider = serverConfig.providers.find(p => p.id === pid);
+                        const firstModel = pid === 'openrouter'
+                          ? selectedProvider?.model || ''
+                          : selectedProvider?.models[0]?.id || '';
                         if (slot === 1) setEscalateDraft(d => ({ ...d, p1: pid, m1: firstModel }));
                         else             setEscalateDraft(d => ({ ...d, p2: pid, m2: firstModel }));
                       }}
@@ -2047,21 +2053,35 @@ function App() {
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
-                    <select
-                      className="settings-select"
-                      value={draftMid}
-                      disabled={!draftPid}
-                      onChange={(e) => {
-                        const mid = e.target.value;
-                        if (slot === 1) setEscalateDraft(d => ({ ...d, m1: mid }));
-                        else             setEscalateDraft(d => ({ ...d, m2: mid }));
-                      }}
-                    >
-                      <option value="">モデルを選択</option>
-                      {providerModels.map((m: ModelDef) => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.tier.toUpperCase()})</option>
-                      ))}
-                    </select>
+                    {isOpenRouterEscalate ? (
+                      <input
+                        className="settings-input"
+                        value={draftMid}
+                        disabled={!draftPid}
+                        placeholder="例: openai/gpt-4o"
+                        onChange={(e) => {
+                          const mid = e.target.value.trim();
+                          if (slot === 1) setEscalateDraft(d => ({ ...d, m1: mid }));
+                          else             setEscalateDraft(d => ({ ...d, m2: mid }));
+                        }}
+                      />
+                    ) : (
+                      <select
+                        className="settings-select"
+                        value={draftMid}
+                        disabled={!draftPid}
+                        onChange={(e) => {
+                          const mid = e.target.value;
+                          if (slot === 1) setEscalateDraft(d => ({ ...d, m1: mid }));
+                          else             setEscalateDraft(d => ({ ...d, m2: mid }));
+                        }}
+                      >
+                        <option value="">モデルを選択</option>
+                        {providerModels.map((m: ModelDef) => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.tier.toUpperCase()})</option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       className="escalate-save-btn"
                       onClick={() => {

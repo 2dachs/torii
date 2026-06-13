@@ -83,6 +83,7 @@ vscode API依存の調査結果:
    - `/api/chat/escalate` は `PROVIDERS` の固定 `models` と `defaultEndpoint` に寄っている。
    - OpenRouterの自由入力モデルやユーザー設定endpointが反映されにくい。
    - 対応案: `getProviderConfig` とVS Code設定から provider/model/endpoint を解決し、OpenRouterの任意モデルIDも許容する。
+   - 対応済み: 再実行先は設定済み provider/model を優先し、固定モデル一覧にないOpenRouter任意モデルIDも許容。endpoint/maxTokensもプロバイダー別VS Code設定から取得する。
 
 ### 優先度中
 

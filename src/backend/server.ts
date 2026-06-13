@@ -503,6 +503,37 @@ function calculateCost(
          (completionTokens / 1_000_000) * model.outputCostPer1M;
 }
 
+function resolveConfiguredModel(provider: ProviderDef, modelId: string): ModelDef {
+  return provider.models.find((m) => m.id === modelId) || {
+    id: modelId,
+    name: modelId,
+    tier: 'pro',
+    description: 'Custom configured model',
+    supportsImages: false,
+    inputCostPer1M: 0,
+    outputCostPer1M: 0,
+  };
+}
+
+function resolveEscalationTarget(
+  targetProviderId?: string,
+  targetModelId?: string,
+  targetTier?: string,
+): { provider: ProviderDef; model: ModelDef; tier: string } | undefined {
+  if (targetProviderId && targetModelId) {
+    const provider = PROVIDERS[targetProviderId as ProviderId];
+    if (provider) {
+      const model = resolveConfiguredModel(provider, targetModelId);
+      return { provider, model, tier: model.tier };
+    }
+  }
+
+  const chain = PromptRouter.buildEscalationChain();
+  if (targetTier === 'flash') return chain[1] || chain[0];
+  if (targetTier === 'local') return chain[0];
+  return chain[chain.length - 1];
+}
+
 /**
  * メッセージ冒頭からタスクタイトルを生成する
  * 句読点・改行で区切り、最大40文字
@@ -1251,22 +1282,7 @@ ${chatTree}${chatEditorSection}
       const { workspaceId: reqWorkspaceId, taskId, targetTier, targetProviderId, targetModelId } = req.body;
       const workspaceId = reqWorkspaceId || getCurrentWorkspaceId();
 
-      let targetEntry: { provider: any; model: any; tier: string } | undefined;
-
-      if (targetProviderId && targetModelId) {
-        const provider = Object.values(PROVIDERS).find((p: any) => p.id === targetProviderId);
-        const model = provider?.models.find((m: any) => m.id === targetModelId);
-        if (provider && model) {
-          targetEntry = { provider, model, tier: model.tier };
-        }
-      }
-
-      if (!targetEntry) {
-        const chain = PromptRouter.buildEscalationChain();
-        targetEntry = chain[chain.length - 1];
-        if (targetTier === 'flash') targetEntry = chain[1] || chain[0];
-        if (targetTier === 'local') targetEntry = chain[0];
-      }
+      const targetEntry = resolveEscalationTarget(targetProviderId, targetModelId, targetTier);
 
       if (!targetEntry) {
         res.status(400).json({ error: 'エスカレーション先が見つかりません' });
@@ -1294,7 +1310,12 @@ ${chatTree}${chatEditorSection}
         }
       }
 
-      const { maxTokens } = getProviderConfig(context, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '');
+      const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+      const maxTokens = config.get<number>(`${escalateProvider.id}.maxTokens`, DEFAULT_MAX_TOKENS);
+      const endpoint = normalizeEndpoint(
+        escalateProvider.id,
+        config.get<string>(`${escalateProvider.id}.endpoint`, escalateProvider.defaultEndpoint)!,
+      );
 
       const messages: { role: string; content: string }[] = [
         { role: 'system', content: `You are Torii. Current: ${escalateProvider.name} (${escalateModel.name}).` },
@@ -1303,13 +1324,13 @@ ${chatTree}${chatEditorSection}
 
       let result: { reply: string; tokensUsed: number; promptTokens: number; completionTokens: number };
       if (escalateProvider.id === 'ollama') {
-        result = await callOllama(escalateProvider.defaultEndpoint, escalateProvider.chatPath, escalateModel.id, messages);
+        result = await callOllama(endpoint, escalateProvider.chatPath, escalateModel.id, messages);
       } else if (escalateProvider.id === 'anthropic') {
-        result = await callAnthropic(escalateProvider.defaultEndpoint, escalateProvider.chatPath, apiKey, escalateProvider.authPrefix, escalateModel.id, maxTokens, messages, false);
+        result = await callAnthropic(endpoint, escalateProvider.chatPath, apiKey, escalateProvider.authPrefix, escalateModel.id, maxTokens, messages, false);
       } else if (escalateProvider.id === 'gemini') {
-        result = await callGemini(escalateProvider.defaultEndpoint, escalateModel.id, apiKey, maxTokens, messages);
+        result = await callGemini(endpoint, escalateModel.id, apiKey, maxTokens, messages);
       } else {
-        result = await callOpenAICompatible(escalateProvider.defaultEndpoint, escalateProvider.chatPath, apiKey, escalateProvider.authPrefix, escalateModel.id, maxTokens, messages, false);
+        result = await callOpenAICompatible(endpoint, escalateProvider.chatPath, apiKey, escalateProvider.authPrefix, escalateModel.id, maxTokens, messages, false);
       }
 
       const exchangeRate = await getUsdToJpyRate();
