@@ -7,6 +7,7 @@ import { getChatHistory, clearAllHistory, getTasks, createTask, ChatMessage, Tas
 import { getSecretsManager } from '../backend/secretsManager';
 import { updateBudgetDisplay } from '../backend/statusBar';
 import { executeInTerminal } from '../backend/terminalBridge';
+import { getCurrentWorkspaceId } from '../backend/workspace';
 import * as licenseManager from '../backend/licenseManager';
 import { updateLicenseBadge } from '../backend/statusBar';
 import {
@@ -603,12 +604,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   private _getWorkspaceId(): string {
-    // vscode.workspace.workspaceFolders からプロジェクトの一意なキーを生成
-    const folders = vscode.workspace.workspaceFolders;
-    if (folders && folders.length > 0) {
-      return folders[0].uri.toString();
-    }
-    return 'global-workspace';
+    return getCurrentWorkspaceId();
   }
 
   public async clearHistory() {

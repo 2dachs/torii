@@ -77,6 +77,7 @@ vscode API依存の調査結果:
    - 通常の保存は `vscode.workspace.workspaceFolders[0].uri.toString()` ベース。
    - `/api/budget` は `fsPath` を使っており、プロジェクト予算表示が0扱い・ズレ表示になる可能性がある。
    - 対応案: workspaceId生成を共通関数化し、server/provider/storageで同じキーを使う。
+   - 対応済み: `getCurrentWorkspaceId()` で `uri.toString()` に統一し、`/api/budget` / model usage / escalate fallback / Webview provider のキーを揃えた。
 
 3. **上位モデル再実行の設定反映不足**
    - `/api/chat/escalate` は `PROVIDERS` の固定 `models` と `defaultEndpoint` に寄っている。

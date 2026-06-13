@@ -16,6 +16,7 @@ import { runAgentLoop } from './agentLoop';
 import type { AgentEvent } from './agentLoop';
 import { resolveApproval } from './approvalManager';
 import * as licenseManager from './licenseManager';
+import { getCurrentWorkspaceId } from './workspace';
 import {
   PROVIDERS,
   ProviderId,
@@ -1236,7 +1237,7 @@ ${chatTree}${chatEditorSection}
   // GET /api/model-usage - モデル別月間使用量
   app.get('/api/model-usage', async (req, res) => {
     try {
-      const workspaceId = (req.query.workspaceId as string) || vscode.workspace.workspaceFolders?.[0]?.uri.toString() || 'global-workspace';
+      const workspaceId = (req.query.workspaceId as string) || getCurrentWorkspaceId();
       const usageList = await getAllModelUsageThisMonth(workspaceId);
       res.json({ usage: usageList });
     } catch (err: any) {
@@ -1248,7 +1249,7 @@ ${chatTree}${chatEditorSection}
   app.post('/api/chat/escalate', async (req, res) => {
     try {
       const { workspaceId: reqWorkspaceId, taskId, targetTier, targetProviderId, targetModelId } = req.body;
-      const workspaceId = reqWorkspaceId || vscode.workspace.workspaceFolders?.[0]?.uri.toString() || 'global-workspace';
+      const workspaceId = reqWorkspaceId || getCurrentWorkspaceId();
 
       let targetEntry: { provider: any; model: any; tier: string } | undefined;
 
@@ -1365,7 +1366,7 @@ ${chatTree}${chatEditorSection}
       const { monthlyBudget } = getProviderConfig(context);
       const exchangeRate = await getUsdToJpyRate();
 
-      const workspaceId = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'global';
+      const workspaceId = getCurrentWorkspaceId();
       const budget = await getMonthlyBudget(workspaceId);
       const totalCostThisMonth = budget?.total_cost_usd || 0;
       const totalCostThisMonthJpy = totalCostThisMonth * exchangeRate;
