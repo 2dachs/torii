@@ -165,6 +165,13 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-13
+- **バージョン 0.4.0 作成**:
+  - **`src/backend/tools.ts` / `src/backend/server.ts` / `src/webview/provider.ts` / `webview/src/App.tsx`**: Agentのファイル変更Undo導線を追加。`write_file` / `replace_in_file` 適用後に旧内容へ戻せる
+  - **`src/backend/tools.ts` / `src/webview/provider.ts` / `webview/src/App.tsx` / `package.json`**: run_command allowlistを追加。承認カードの「今後も許可」で完全一致コマンドを自動許可できる
+  - **`package.json` / `package-lock.json`**: VSIX配布用にバージョンを `0.4.0` へ更新
+  - **配布物**: `torii-0.4.0.vsix` を作成済み
+
+### 2026-06-13
 - **バージョン 0.3.2 作成**:
   - **`src/backend/server.ts` / `webview/src/App.tsx`**: 上位モデル再実行でOpenRouterの任意モデルIDを許容。再実行時のendpoint/maxTokensもプロバイダー別VS Code設定から取得するよう修正
   - **`src/backend/workspace.ts` / `src/webview/provider.ts`**: workspaceId生成を `uri.toString()` に統一し、プロジェクト予算表示と保存時のキー不一致を修正
@@ -173,6 +180,8 @@ npm run vscode:prepublish  # 両方まとめてビルド
   - **配布物**: `torii-0.3.2.vsix` を作成済み
 - **Agentファイル変更Undo導線を追加**:
   - **`src/backend/tools.ts` / `src/backend/server.ts` / `src/webview/provider.ts` / `webview/src/App.tsx`**: Agentの `write_file` / `replace_in_file` 適用時に旧内容checkpointを保存し、進捗UIの「元に戻す」ボタンから復元できるよう対応
+- **run_command allowlistを追加**:
+  - **`src/backend/tools.ts` / `src/webview/provider.ts` / `webview/src/App.tsx` / `package.json`**: run_command承認カードに「今後も許可」を追加。完全一致コマンドを `torii.commandAllowlist` に保存し、危険コマンドはallowlist登録済みでも `commandGuard` でブロックする
 
 ### 2026-06-12
 - **Proプラン本番運用への切り替え**:

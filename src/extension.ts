@@ -18,6 +18,7 @@ async function migrateConfig() {
   const current = vscode.workspace.getConfiguration(CONFIG_SECTION);
   const keys = [
     'provider', 'autoRouting', 'monthlyBudget', 'autoApplyFileChanges',
+    'commandAllowlist',
     'mainProvider', 'mainModel', 'subProvider', 'subModel',
     'modelLimits', 'escalationEnabled', 'escalateProvider1', 'escalateModel1',
     'escalateProvider2', 'escalateModel2', 'customPrivacyKeywords',

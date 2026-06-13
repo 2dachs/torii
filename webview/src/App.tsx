@@ -825,9 +825,9 @@ function App() {
   }, []);
 
   // ── 承認ハンドラ ──
-  const handleApprove = useCallback((id: string, approved: boolean) => {
+  const handleApprove = useCallback((id: string, approved: boolean, options?: { allowCommand?: boolean; command?: string }) => {
     setPendingApprovals((prev) => prev.filter((p) => p.id !== id));
-    vscode?.postMessage({ command: MSG_AGENT_APPROVE, id, approved });
+    vscode?.postMessage({ command: MSG_AGENT_APPROVE, id, approved, ...options });
   }, []);
 
   const handleUndoFileChange = useCallback((undoId: string) => {
@@ -1602,6 +1602,14 @@ function App() {
             <button className="approval-btn approve" onClick={() => handleApprove(approval.id, true)}>
               ✅ {(approval.tool === 'write_file' || approval.tool === 'replace_in_file') ? 'Apply' : '実行'}
             </button>
+            {approval.tool === 'run_command' && (
+              <button
+                className="approval-btn allow"
+                onClick={() => handleApprove(approval.id, true, { allowCommand: true, command: (approval.data as any).command })}
+              >
+                ✅ 今後も許可
+              </button>
+            )}
             <button className="approval-btn reject" onClick={() => handleApprove(approval.id, false)}>
               ❌ キャンセル
             </button>

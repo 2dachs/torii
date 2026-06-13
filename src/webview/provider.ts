@@ -68,6 +68,7 @@ import {
   MSG_ESCALATE_RESPONSE,
   MSG_CANCEL_REQUEST,
   MSG_CANCEL_AGENT,
+  CONFIG_COMMAND_ALLOWLIST,
 } from '../constants';
 
 export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
@@ -186,7 +187,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         }
         break;
       case MSG_AGENT_APPROVE:
-        await this._handleAgentApprove(message.id, message.approved);
+        await this._handleAgentApprove(message.id, message.approved, message.allowCommand, message.command);
         break;
       case MSG_UNDO_FILE_CHANGE:
         await this._handleUndoFileChange(message.undoId);
@@ -787,7 +788,16 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   /** エージェント承認応答をExpressサーバーに転送 */
-  private async _handleAgentApprove(id: string, approved: boolean) {
+  private async _handleAgentApprove(id: string, approved: boolean, allowCommand?: boolean, command?: string) {
+    if (approved && allowCommand && typeof command === 'string' && command.trim()) {
+      const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+      const existing = config.get<string[]>(CONFIG_COMMAND_ALLOWLIST, []);
+      const normalized = command.trim();
+      if (!existing.includes(normalized)) {
+        await config.update(CONFIG_COMMAND_ALLOWLIST, [...existing, normalized], vscode.ConfigurationTarget.Global);
+      }
+    }
+
     const payload = JSON.stringify({ id, approved });
     const options = {
       hostname: 'localhost',

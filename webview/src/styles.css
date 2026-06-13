@@ -1770,6 +1770,7 @@ body,
 }
 .approval-btn:hover { opacity: 0.85; }
 .approval-btn.approve { background: var(--success); color: var(--bg-primary); }
+.approval-btn.allow { background: var(--accent); color: var(--bg-primary); }
 .approval-btn.reject { background: var(--surface); color: var(--text-secondary); }
 
 /* ── インラインタスク入力 ── */

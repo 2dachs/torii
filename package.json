@@ -2,7 +2,7 @@
   "name": "torii",
   "displayName": "Torii — AI Coding Agent for VS Code",
   "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "pettal",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -256,6 +256,12 @@
           "type": "boolean",
           "default": false,
           "description": "エージェントがファイルを書き換える際、Applyボタンの確認をスキップして自動書き込みします（Claude Code寄りの動作）"
+        },
+        "torii.commandAllowlist": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "description": "エージェントのrun_commandで自動実行を許可する完全一致コマンド。危険コマンドはこの設定に含まれていてもブロックされます"
         },
         "torii.mainProvider": {
           "type": "string",

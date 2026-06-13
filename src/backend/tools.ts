@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { AgentTool } from '@cline/agents';
 import { isTerminalCommandSafe } from './commandGuard';
 import { requestApproval } from './approvalManager';
+import { CONFIG_COMMAND_ALLOWLIST, CONFIG_SECTION } from '../constants';
 
 let _outputChannel: vscode.OutputChannel | null = null;
 function getOutputChannel(): vscode.OutputChannel {
@@ -25,6 +26,15 @@ interface FileCheckpoint {
 }
 
 const fileCheckpoints = new Map<string, FileCheckpoint>();
+
+function normalizeAllowedCommand(command: string): string {
+  return command.trim();
+}
+
+function getCommandAllowlist(): string[] {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return config.get<string[]>(CONFIG_COMMAND_ALLOWLIST, []).map(normalizeAllowedCommand).filter(Boolean);
+}
 
 function recordFileCheckpoint(pathLabel: string, absPath: string, oldContent: string, existed: boolean): FileCheckpoint {
   const checkpoint: FileCheckpoint = {
@@ -538,23 +548,25 @@ export async function buildClineTools(
         required: ['command'],
       },
       execute: async (input: { command: string }) => {
-        const guard = isTerminalCommandSafe(input.command);
+        const command = normalizeAllowedCommand(input.command);
+        const guard = isTerminalCommandSafe(command);
         if (!guard.safe) return `⚠️ 安全チェックでブロックされました: ${guard.reason}`;
 
-        // コマンド実行は autoApplyFiles 設定に関わらず常に承認必須
-        {
+        const allowlist = getCommandAllowlist();
+        const isAllowed = allowlist.includes(command);
+        if (!isAllowed) {
           const id = uuidv4();
-          const approved = await awaitApproval(id, 'run_command', { command: input.command });
+          const approved = await awaitApproval(id, 'run_command', { command, canAllowlist: true });
           if (!approved) return 'ユーザーによってキャンセルされました。';
         }
 
         const ch = getOutputChannel();
         ch.show(true);
-        ch.appendLine(`\n$ ${input.command}`);
+        ch.appendLine(`\n$ ${command}`);
         ch.appendLine(`── 実行中 (cwd: ${workspacePath}) ──`);
 
         return new Promise<string>((resolve) => {
-          const child = spawn(input.command, {
+          const child = spawn(command, {
             cwd: workspacePath,
             shell: true,
             env: {

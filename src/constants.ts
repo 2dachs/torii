@@ -235,6 +235,7 @@ export const MSG_AGENT_APPROVE = 'agentApprove';
 export const MSG_UNDO_FILE_CHANGE = 'undoFileChange';
 export type AgentMode = 'chat' | 'agent';
 export const CONFIG_AUTO_APPLY_FILES = 'autoApplyFileChanges';
+export const CONFIG_COMMAND_ALLOWLIST = 'commandAllowlist';
 export const DEFAULT_AGENT_MAX_ITERATIONS = 20;
 export const SLASH_COMMANDS = ['agent', 'chat'] as const;
 
