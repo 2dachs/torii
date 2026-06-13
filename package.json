@@ -2,7 +2,7 @@
   "name": "torii",
   "displayName": "Torii — AI Coding Agent for VS Code",
   "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "pettal",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -275,12 +275,12 @@
             "gemini",
             "openrouter"
           ],
-          "description": "メインモデルのプロバイダー（空の場合はprovider設定を使用）"
+          "description": "使用モデルのプロバイダー（空の場合はprovider設定を使用）"
         },
         "torii.mainModel": {
           "type": "string",
           "default": "",
-          "description": "メインモデルのモデルID（空の場合はプロバイダーのデフォルトを使用）"
+          "description": "使用モデルのモデルID（空の場合はプロバイダーのデフォルトを使用）"
         },
         "torii.subProvider": {
           "type": "string",
@@ -293,12 +293,12 @@
             "gemini",
             "openrouter"
           ],
-          "description": "サブモデル（フォールバック先）のプロバイダー"
+          "description": "節約モデル（フォールバック先）のプロバイダー"
         },
         "torii.subModel": {
           "type": "string",
           "default": "qwen2.5-coder",
-          "description": "サブモデルのモデルID"
+          "description": "節約モデルのモデルID"
         },
         "torii.modelLimits": {
           "type": "array",

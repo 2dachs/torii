@@ -1037,14 +1037,20 @@ function App() {
   );
   const currentProviders = serverConfig.providers;
 
-  // 全プロバイダー×モデルの結合オプション（メイン/サブ選択用）
+  // 全プロバイダー×モデルの結合オプション（節約モデル選択用）
   const allModelOptions = useMemo(() =>
-    currentProviders.flatMap(p =>
-      (p.models || []).map(m => ({
+    currentProviders.flatMap(p => {
+      if ((p.models || []).length === 0 && p.model) {
+        return [{
+          value: `${p.id}::${p.model}`,
+          label: `${p.name} / ${p.model}`,
+        }];
+      }
+      return (p.models || []).map(m => ({
         value: `${p.id}::${m.id}`,
         label: `${p.name} / ${m.name} (${m.tier.toUpperCase()})`,
-      }))
-    ),
+      }));
+    }),
     [currentProviders]
   );
 
@@ -1819,10 +1825,10 @@ function App() {
           <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
             <h3>⚙️ 設定</h3>
 
-            {/* ── Section 1: 現在のモデル ── */}
-            <div className="settings-section-title">現在のモデル</div>
+            {/* ── Section 1: 使用モデル ── */}
+            <div className="settings-section-title">使用モデル</div>
             <span className="budget-hint" style={{display:'block', marginBottom: 4}}>
-              ※ 自動ルーティング有効時はタスク内容で変わる場合があります
+              通常使うモデル。自動ルーティング有効時はタスク内容で変わる場合があります
             </span>
             <div className="active-model-row">
               <select
@@ -1882,7 +1888,7 @@ function App() {
 
             {/* ── Section 2: APIキー設定 ── */}
             <div className="settings-divider" />
-            <div className="settings-section-title">APIキー設定</div>
+            <div className="settings-section-title">接続設定</div>
             <div className="provider-config-list">
               {currentProviders.map(p => {
                 const settings = getProvider(p.id);
@@ -2057,9 +2063,9 @@ function App() {
 
             {/* ── Section 3: 上位モデル再実行設定 ── */}
             <div className="settings-divider" />
-            <div className="settings-section-title">上位モデル再実行の設定</div>
+            <div className="settings-section-title">再実行モデル</div>
             <span className="budget-hint" style={{display:'block', marginBottom: 8}}>
-              チャット下部の「上位モデルで再実行」ボタンに割り当てるモデルを選択します
+              必要な時だけ使う高性能モデル。チャット下部の再実行ボタンに割り当てます
             </span>
             {([1, 2] as const).map(slot => {
               const draftPid = slot === 1 ? escalateDraft.p1 : escalateDraft.p2;
@@ -2138,7 +2144,7 @@ function App() {
 
             {/* ── Section 4: 予算・ルーティング ── */}
             <div className="settings-divider" />
-            <div className="settings-section-title">予算・ルーティング</div>
+            <div className="settings-section-title">予算・節約</div>
 
             <div className="settings-field">
               <label>予算バー表示通貨</label>
@@ -2217,26 +2223,11 @@ function App() {
                 />
                 <span>🔀 自動ルーティング</span>
               </label>
-              <span className="budget-hint">タスクの内容に応じて最適なモデルを自動選択</span>
+              <span className="budget-hint">タスクの内容や予算状況に応じてモデルを切り替えます</span>
             </div>
 
             <div className="settings-field">
-              <label>メインモデル（通常使用）</label>
-              <select
-                className="settings-select"
-                value={`${serverConfig.mainProvider || serverConfig.provider}::${serverConfig.mainModel || serverConfig.model}`}
-                onChange={(e) => {
-                  const [pid, mid] = e.target.value.split('::');
-                  setServerConfig(prev => ({ ...prev, mainProvider: pid, mainModel: mid }));
-                  vscode?.postMessage({ command: MSG_UPDATE_MODEL_CONFIG, config: { mainProvider: pid, mainModel: mid } });
-                }}
-              >
-                {allModelOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-            </div>
-
-            <div className="settings-field">
-              <label>サブモデル（フォールバック先）</label>
+              <label>節約モデル</label>
               <select
                 className="settings-select"
                 value={`${serverConfig.subProvider || 'ollama'}::${serverConfig.subModel || 'qwen2.5-coder'}`}
@@ -2248,7 +2239,7 @@ function App() {
               >
                 {allModelOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
-              <span className="budget-hint">Ollamaを選ぶと完全無料のフォールバック</span>
+              <span className="budget-hint">予算・モデル上限に達した時の切り替え先。Ollamaなら無料です</span>
             </div>
 
             {/* ── 詳細設定（折りたたみ）── */}
@@ -2290,7 +2281,7 @@ function App() {
                     </div>
                   );
                 })}
-                <span className="budget-hint">上限に達するとサブモデルに自動切り替え</span>
+                <span className="budget-hint">上限に達すると節約モデルに自動切り替え</span>
               </div>
 
               <div className="settings-section-title" style={{ marginTop: 10 }}>🎯 自動ルーティングルール</div>
