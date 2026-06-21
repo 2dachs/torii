@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { promises as fsp } from 'fs';
 import * as http from 'http';
-import { getChatHistory, clearAllHistory, getTasks, createTask, ChatMessage, Task, getMonthlyBudget, getGlobalMonthlyBudget } from '../backend/storage';
+import { getChatHistory, clearAllHistory, getTasks, createTask, renameTask, deleteTask, ChatMessage, Task, getMonthlyBudget, getGlobalMonthlyBudget } from '../backend/storage';
 import { getSecretsManager } from '../backend/secretsManager';
 import { updateBudgetDisplay } from '../backend/statusBar';
 import { executeInTerminal } from '../backend/terminalBridge';
@@ -25,6 +25,8 @@ import {
   MSG_UPDATE_PROVIDER_CONFIG,
   MSG_EDITOR_CONTENT,
   MSG_CREATE_TASK,
+  MSG_RENAME_TASK,
+  MSG_DELETE_TASK,
   MSG_UPDATE_BUDGET_SCOPE,
   MSG_READ_FILES,
   MSG_WRITE_FILE,
@@ -232,6 +234,12 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       case MSG_CREATE_TASK:
         await this._handleCreateTask(message.title);
         break;
+      case MSG_RENAME_TASK:
+        await this._handleRenameTask(message.taskId, message.title);
+        break;
+      case MSG_DELETE_TASK:
+        await this._handleDeleteTask(message.taskId);
+        break;
       case MSG_UPDATE_BUDGET_SCOPE:
         await this._handleUpdateBudgetScope(message.scope);
         break;
@@ -325,6 +333,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         language: doc.languageId,
         content,
         lineCount: doc.lineCount,
+        selectedText: doc.getText(editor.selection),
       },
     });
   }
@@ -673,6 +682,18 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private async _handleCreateTask(title: string) {
     const workspaceId = this._getWorkspaceId();
     await createTask(workspaceId, title);
+    await this._sendTasks();
+  }
+
+  private async _handleRenameTask(taskId: string, title: string) {
+    if (!taskId) return;
+    await renameTask(taskId, title);
+    await this._sendTasks();
+  }
+
+  private async _handleDeleteTask(taskId: string) {
+    if (!taskId) return;
+    await deleteTask(taskId);
     await this._sendTasks();
   }
 

@@ -299,7 +299,7 @@ export async function buildClineTools(
     return approved;
   };
 
-  const readFileCache = new Map<string, string>();
+  const readFileCache = new Map<string, { content: string; mtimeMs: number; size: number }>();
   const fileWriteCountMap = new Map<string, number>();
 
   const TASK_REMINDER = '\n\n[REMINDER: 元のタスクに集中し、完了までツールを使い続けよ。attempt_completion を呼ぶまで停止するな。]';
@@ -317,14 +317,17 @@ export async function buildClineTools(
         required: ['path'],
       },
       execute: async (input: { path: string }) => {
-        const cached = readFileCache.get(input.path);
-        if (cached) return cached;
         const absPath = resolvePath(input.path);
         try {
+          const stat = fs.statSync(absPath);
+          const cached = readFileCache.get(input.path);
+          if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+            return cached.content;
+          }
           const content = fs.readFileSync(absPath, 'utf-8');
           const lineCount = content.split('\n').length;
           const result = `${content}\n\n// [${lineCount}行 | ${path.relative(workspacePath, absPath)}]`;
-          readFileCache.set(input.path, result);
+          readFileCache.set(input.path, { content: result, mtimeMs: stat.mtimeMs, size: stat.size });
           return result;
         } catch (err: any) {
           throw new Error(`ファイル読み取りエラー: ${err.message}`);
@@ -537,15 +540,16 @@ export async function buildClineTools(
     // ── run_command ──
     createTool({
       name: 'run_command',
-      description: 'シェルコマンドを実行する。ビルド・テスト・型チェックに使用。実行前にユーザーの承認が必要。',
+      description: 'シェルコマンドを実行する。ビルド・テスト・型チェックに使用。実行前にユーザーの承認が必要。長時間かかるコマンドは timeoutMs で延長できる。',
       inputSchema: {
         type: 'object',
         properties: {
           command: { type: 'string', description: '実行するシェルコマンド' },
+          timeoutMs: { type: 'number', description: 'タイムアウト時間（ミリ秒）。省略時は120000。0以下で無制限。' },
         },
         required: ['command'],
       },
-      execute: async (input: { command: string }) => {
+      execute: async (input: { command: string; timeoutMs?: number }) => {
         const command = normalizeAllowedCommand(input.command);
         const guard = isTerminalCommandSafe(command);
         if (!guard.safe) return `⚠️ 安全チェックでブロックされました: ${guard.reason}`;
@@ -578,11 +582,12 @@ export async function buildClineTools(
           });
 
           const chunks: string[] = [];
-          const timer = setTimeout(() => {
+          const timeoutMs = typeof input.timeoutMs === 'number' ? input.timeoutMs : 120_000;
+          const timer = timeoutMs > 0 ? setTimeout(() => {
             child.kill();
             ch.appendLine('⚠️ タイムアウト');
-            resolve('タイムアウト: 120秒を超えました。');
-          }, 120_000);
+            resolve(`タイムアウト: ${timeoutMs / 1000}秒を超えました。`);
+          }, timeoutMs) : null;
 
           child.stdout.on('data', (data: Buffer) => {
             const chunk = data.toString();
@@ -595,13 +600,13 @@ export async function buildClineTools(
             ch.append(chunk);
           });
           child.on('close', (code) => {
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             const output = chunks.join('').trim() || '(出力なし)';
             ch.appendLine(`\n── 終了 (exit ${code}) ──`);
             resolve(code === 0 ? output : `コマンドエラー (exit ${code}):\n${output}`);
           });
           child.on('error', (err) => {
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             ch.appendLine(`❌ 実行エラー: ${err.message}`);
             resolve(`実行エラー: ${err.message}`);
           });

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
-import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS } from '../../src/constants';
+import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -38,6 +38,28 @@ const TOOL_CATEGORIES: Record<string, string> = {
   search_files: 'search',
   grep: 'search',
 };
+
+const CONTEXT_TOKEN_LIMITS: Record<string, number> = {
+  'claude-opus': 180000,
+  'claude-sonnet': 180000,
+  'deepseek-chat': 60000,
+  'deepseek-reasoner': 60000,
+  'gpt-4o': 120000,
+  'gpt-4o-mini': 120000,
+  'gemini-2.5-flash': 1000000,
+  'gemini-2.5-pro': 1000000,
+  default: 60000,
+};
+
+function estimateContextTokens(text: string): number {
+  return Math.max(0, Math.floor(text.length / 4));
+}
+
+function getContextTokenLimit(modelId: string): number {
+  const lower = modelId.toLowerCase();
+  const key = Object.keys(CONTEXT_TOKEN_LIMITS).find((k) => k !== 'default' && lower.includes(k));
+  return key ? CONTEXT_TOKEN_LIMITS[key] : CONTEXT_TOKEN_LIMITS.default;
+}
 
 function ToriiIcon({ size = 20, className }: { size?: number; className?: string }) {
   return (
@@ -407,8 +429,9 @@ function App() {
   // ── クイック切替 & 添付 ──
   const [showQuickSwitch, setShowQuickSwitch] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [editorInfo, setEditorInfo] = useState<{ fileName: string; language: string; lineCount: number } | null>(null);
+  const [editorInfo, setEditorInfo] = useState<{ fileName: string; language: string; lineCount: number; content?: string; selectedText?: string } | null>(null);
   const [showEditorContext, setShowEditorContext] = useState(false);
+  const [editorAttachMode, setEditorAttachMode] = useState<'file' | 'selection'>('file');
 
   // ── 進捗状態 ──
   const [processingStatus, setProcessingStatus] = useState<{
@@ -434,6 +457,7 @@ function App() {
   const [escalateSavedSlot, setEscalateSavedSlot] = useState<0 | 1 | 2>(0);
   const [expandedProviderConfig, setExpandedProviderConfig] = useState<string | null>(null);
   const [taskListExpanded, setTaskListExpanded] = useState(false);
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
 
   const [inputAreaHeight, setInputAreaHeight] = useState(200);
 
@@ -451,6 +475,12 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isComposingRef = useRef(false);
+  const lastRequestRef = useRef<{
+    text: string;
+    taskId: string | null;
+    agentMode: AgentMode;
+    images: Array<{ data: string; mimeType: string }>;
+  } | null>(null);
   // ユーザーが意図的に「新しいチャット」モードに入ったときに true。
   // loadTasks の自動タスク選択を抑止するために使う。
   const isNewChatModeRef = useRef(false);
@@ -956,11 +986,17 @@ function App() {
 
     const imageAttachments = attachments.filter(a => a.type === 'image');
     const textAttachment = attachments.find(a => a.type === 'text');
+    const fileMentionToken = editorInfo ? `@${editorInfo.fileName}` : '';
+    const baseContent = text;
+    const hasFileMention = !!fileMentionToken && baseContent.includes(fileMentionToken);
 
     // テキスト添付がある場合はメッセージに追加
     let content = text;
-    if (showEditorContext && editorInfo) {
-      content = `${text}\n\n--- 現在のファイル: ${editorInfo.fileName || 'unknown'} ---\n\`\`\`${editorInfo.language || ''}\n${(editorInfo as any).content || textAttachment?.data || ''}\n\`\`\``;
+    if ((showEditorContext || hasFileMention) && editorInfo) {
+      const selectedText = editorAttachMode === 'selection' && editorInfo.selectedText ? editorInfo.selectedText : '';
+      const contextBody = selectedText || (editorInfo.content || textAttachment?.data || '');
+      const contextLabel = selectedText ? `選択範囲: ${editorInfo.fileName}` : `現在のファイル: ${editorInfo.fileName}`;
+      content = `${baseContent.replace(fileMentionToken, '').trim()}\n\n--- ${contextLabel} ---\n\`\`\`${editorInfo.language || ''}\n${contextBody}\n\`\`\``;
     }
 
     // スラッシュコマンドを処理してモードを決定（ライセンスチェックより前に確定する）
@@ -1003,6 +1039,12 @@ function App() {
     setShowQuickSwitch(false);
     setStreamingText('');
     setAgentSteps([]);
+    lastRequestRef.current = {
+      text: finalContent,
+      taskId: activeTaskId,
+      agentMode: effectiveMode,
+      images: imageAttachments.map(a => ({ data: a.data, mimeType: a.mimeType || 'image/png' })),
+    };
 
     vscode?.postMessage({
       command: 'sendMessage',
@@ -1129,8 +1171,47 @@ function App() {
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
+  const handleRenameTask = useCallback((taskId: string, currentTitle: string) => {
+    const nextTitle = window.prompt('タスク名を変更', currentTitle);
+    if (nextTitle === null) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed || trimmed === currentTitle) return;
+    vscode?.postMessage({ command: MSG_RENAME_TASK, taskId, title: trimmed });
+  }, []);
+
+  const handleDeleteTask = useCallback((taskId: string, title: string) => {
+    const ok = window.confirm(`「${title}」を削除します。履歴も消えます。`);
+    if (!ok) return;
+    if (taskId === activeTaskId) {
+      setActiveTaskId(null);
+      setMessages([]);
+    }
+    vscode?.postMessage({ command: MSG_DELETE_TASK, taskId });
+  }, [activeTaskId]);
+
+  const handleRetryLastRequest = useCallback(() => {
+    const last = lastRequestRef.current;
+    if (!last || loading) return;
+    if (last.taskId !== activeTaskId) {
+      setActiveTaskId(last.taskId);
+    }
+    setLoading(true);
+    setShowQuickSwitch(false);
+    setStreamingText('');
+    setAgentSteps([]);
+    vscode?.postMessage({
+      command: 'sendMessage',
+      text: last.text,
+      taskId: last.taskId,
+      agentMode: last.agentMode,
+      images: last.images,
+    });
+  }, [loading, activeTaskId]);
+
   // ── 履歴クリア ──
   const handleClearHistory = useCallback(() => {
+    const ok = window.confirm('現在のワークスペースの履歴をすべて削除します。よろしいですか？');
+    if (!ok) return;
     vscode?.postMessage({ command: 'clearHistory' });
     setMessages([]);
   }, []);
@@ -1386,6 +1467,11 @@ function App() {
     p => p.id === (serverConfig.mainProvider || serverConfig.provider)
   );
   const currentProviders = serverConfig.providers;
+  const filteredTasks = useMemo(() => {
+    const query = taskSearchQuery.trim().toLowerCase();
+    if (!query) return tasks;
+    return tasks.filter((task) => task.title.toLowerCase().includes(query));
+  }, [tasks, taskSearchQuery]);
 
   // 全プロバイダー×モデルの結合オプション（節約モデル選択用）
   const allModelOptions = useMemo(() =>
@@ -1418,6 +1504,12 @@ function App() {
   const isCurrencyUSD = serverConfig.displayCurrency === 'USD';
   const budgetCostUsd = budgetCostJpy / exchangeRate;
   const budgetLimitUsd = serverConfig.monthlyBudget;
+  const contextTokenCount = useMemo(() => {
+    const messageTokens = messages.reduce((sum, msg) => sum + estimateContextTokens(msg.content || ''), 0);
+    return messageTokens + estimateContextTokens(streamingText) + estimateContextTokens(input);
+  }, [messages, streamingText, input]);
+  const contextTokenLimit = getContextTokenLimit(effectiveModelId || serverConfig.model);
+  const contextUsagePercent = contextTokenLimit > 0 ? (contextTokenCount / contextTokenLimit) * 100 : 0;
 
   return (
     <div className="app-container">
@@ -1468,16 +1560,48 @@ function App() {
                 ✏️ 新しいチャット
               </div>
             )}
-            {tasks.length === 0 && activeTaskId !== null ? (
+            <div className="task-search-row">
+              <input
+                className="task-search-input"
+                type="text"
+                placeholder="タスクを検索"
+                value={taskSearchQuery}
+                onChange={(e) => setTaskSearchQuery(e.target.value)}
+              />
+              {taskSearchQuery && (
+                <button className="task-search-clear" onClick={() => setTaskSearchQuery('')}>
+                  ×
+                </button>
+              )}
+            </div>
+            {tasks.length === 0 ? (
               <div className="task-empty">「＋」を押してチャットを開始してください</div>
+            ) : filteredTasks.length === 0 ? (
+              <div className="task-empty">検索結果がありません</div>
             ) : (
-              tasks.map((task) => (
+              filteredTasks.map((task) => (
                 <div
                   key={task.id}
                   className={`task-item${task.id === activeTaskId ? ' active' : ''}`}
                   onClick={() => { handleSelectTask(task.id); setTaskListExpanded(false); }}
                 >
-                  {task.title}
+                  <span className="task-item-title" title={task.title}>{task.title}</span>
+                  <div className="task-item-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="task-item-action"
+                      title="名前を変更"
+                      onClick={() => handleRenameTask(task.id, task.title)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="task-item-action danger"
+                      title="削除"
+                      onClick={() => handleDeleteTask(task.id, task.title)}
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -1606,6 +1730,11 @@ function App() {
               </div>
             )}
             <MarkdownContent content={msg.content} className="message-markdown" />
+            {msg.role === 'error' && lastRequestRef.current && (
+              <button className="message-retry-btn" onClick={handleRetryLastRequest}>
+                ↻ 再試行
+              </button>
+            )}
             {(msg.role === 'user' || msg.role === 'assistant') && (
               <button
                 className={`copy-btn${copiedIds.has(msg.id) ? ' copied' : ''}`}
@@ -1850,6 +1979,19 @@ function App() {
         >
           ⚙️
         </button>
+      </div>
+      <div className="context-meter">
+        <span className="budget-meter-title">コンテキスト</span>
+        <div className="budget-meter-bar">
+          <div
+            className={`budget-meter-fill${contextUsagePercent >= 80 ? ' is-danger' : contextUsagePercent >= 60 ? ' is-warning' : ' is-ok'}`}
+            style={{ width: `${Math.min(contextUsagePercent, 100)}%` }}
+          />
+        </div>
+        <span className="budget-meter-label" title={`推定 ${contextTokenCount.toLocaleString()} tokens / 上限 ${contextTokenLimit.toLocaleString()} tokens`}>
+          {`${Math.min(Math.round(contextUsagePercent), 999)}% · ${contextTokenCount.toLocaleString()} / ${contextTokenLimit.toLocaleString()} tokens`}
+        </span>
+        {contextUsagePercent >= 80 && <span className="budget-meter-warn">⚠</span>}
       </div>
 
       {/* ── モデル上限警告バナー（機能3）── */}
@@ -2156,6 +2298,29 @@ function App() {
         <div className="editor-context-bar">
           📝 <span className="ec-filename">{editorInfo.fileName}</span>
           <span className="ec-meta">{editorInfo.language} · {editorInfo.lineCount}行</span>
+          <button
+            className={`ec-mode-btn${editorAttachMode === 'file' ? ' active' : ''}`}
+            onClick={() => {
+              setEditorAttachMode('file');
+              setInput((prev) => {
+                const token = `@${editorInfo.fileName}`;
+                return prev.includes(token) ? prev : `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}${token}`;
+              });
+              setTimeout(() => textareaRef.current?.focus(), 0);
+            }}
+            title="現在のファイル名を入力欄に挿入"
+          >
+            @
+          </button>
+          {editorInfo.selectedText && (
+            <button
+              className={`ec-mode-btn${editorAttachMode === 'selection' ? ' active' : ''}`}
+              onClick={() => setEditorAttachMode('selection')}
+              title="選択範囲を添付"
+            >
+              選択
+            </button>
+          )}
           <button className="ec-remove" onClick={handleToggleEditorContext}>×</button>
         </div>
       )}

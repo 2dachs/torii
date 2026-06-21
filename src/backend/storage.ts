@@ -340,6 +340,30 @@ export function deleteTask(id: string): Promise<void> {
   });
 }
 
+export function renameTask(id: string, title: string): Promise<Task | null> {
+  return queuedWrite(async () => {
+    const now = new Date().toISOString();
+    const taskPath = taskFilePath(id);
+    const task = await safeReadJSON<TaskFile | null>(taskPath, null);
+    if (!task) return null;
+
+    const nextTitle = title.trim() || task.title || '無題';
+    task.title = nextTitle;
+    task.updated_at = now;
+    await atomicWriteFile(taskPath, task);
+
+    const list = await safeReadJSON<ListFile>(listFilePath(), { tasks: [] });
+    const entry = list.tasks.find((t) => t.id === id);
+    if (entry) {
+      entry.title = nextTitle;
+      entry.updated_at = now;
+    }
+    await atomicWriteFile(listFilePath(), list);
+
+    return { id: task.id, workspace_id: task.workspace_id, title: task.title, created_at: task.created_at, updated_at: task.updated_at };
+  });
+}
+
 // ── Chat Messages ──
 
 export function saveChatMessage(
