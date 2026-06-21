@@ -1038,14 +1038,9 @@ ${chatTree}${chatEditorSection}
       return;
     }
 
-    // タスク未指定なら自動作成
+    // タスク未指定ならライセンス確認後に自動作成
     let taskId: string | null = req.body.taskId || null;
     let autoCreatedTaskId: string | null = null;
-    if (!taskId) {
-      const newTask = await createTask(workspaceId, generateTaskTitle(message));
-      taskId = newTask.id;
-      autoCreatedTaskId = newTask.id;
-    }
 
     // SSE ヘッダー
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1083,6 +1078,13 @@ ${chatTree}${chatEditorSection}
       sendEvent({ type: 'error', message: 'ライセンス確認に失敗しました。VSCodeを再起動してください。' });
       res.end();
       return;
+    }
+
+    if (!taskId) {
+      const newTask = await createTask(workspaceId, generateTaskTitle(message));
+      taskId = newTask.id;
+      autoCreatedTaskId = newTask.id;
+      sendEvent({ type: 'task_created', taskId: autoCreatedTaskId });
     }
 
     try {
