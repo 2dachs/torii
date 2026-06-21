@@ -78,6 +78,18 @@ function formatTaskDate(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function splitDiffLines(content: string): string[] {
+  if (!content) return [];
+  return content.replace(/\r\n/g, '\n').split('\n');
+}
+
+function formatDiffLines(lines: string[], startLine: number, prefix: string): string {
+  if (lines.length === 0) return '（なし）';
+  return lines
+    .map((line, idx) => `${prefix}${String(startLine + idx).padStart(4, ' ')} | ${line}`)
+    .join('\n');
+}
+
 function getGitLabel(command: string): string | null {
   if (!/git/.test(command)) return null;
   const ops: string[] = [];
@@ -944,8 +956,14 @@ function App() {
   const [fileContents, setFileContents] = useState<FileContent[]>([]);
   const [activeFileTab, setActiveFileTab] = useState(0);
   const [showFileViewer, setShowFileViewer] = useState(false);
-  const [editingFile, setEditingFile] = useState<{ path: string; content: string } | null>(null);
+  const [editingFile, setEditingFile] = useState<{ path: string; content: string; originalContent: string } | null>(null);
   const [fileWriteStatus, setFileWriteStatus] = useState<{ path: string; success: boolean; error?: string } | null>(null);
+  const [pendingFileWrite, setPendingFileWrite] = useState<{
+    path: string;
+    originalContent: string;
+    nextContent: string;
+    closeViewer: boolean;
+  } | null>(null);
   // インラインファイル表示用: パス → ファイル内容
   const [inlineFiles, setInlineFiles] = useState<Record<string, FileContent>>({});
   // 読み取り中フラグ（パスセット）
@@ -992,16 +1010,73 @@ function App() {
   }, []);
 
   // ファイル書き込み
-  const handleWriteFile = useCallback((filePath: string, content: string) => {
-    vscode?.postMessage({ command: MSG_WRITE_FILE, path: filePath, content });
-    setEditingFile(null);
-    setShowFileViewer(false);
+  const handleWriteFile = useCallback((filePath: string, content: string, originalContent: string, closeViewer = true) => {
+    setPendingFileWrite({
+      path: filePath,
+      originalContent,
+      nextContent: content,
+      closeViewer,
+    });
+  }, []);
+
+  const handleConfirmWriteFile = useCallback(() => {
+    if (!pendingFileWrite) return;
+    vscode?.postMessage({
+      command: MSG_WRITE_FILE,
+      path: pendingFileWrite.path,
+      content: pendingFileWrite.nextContent,
+    });
+    setPendingFileWrite(null);
+    if (pendingFileWrite.closeViewer) {
+      setEditingFile(null);
+      setShowFileViewer(false);
+    }
+  }, [pendingFileWrite]);
+
+  const handleCancelWriteFile = useCallback(() => {
+    setPendingFileWrite(null);
   }, []);
 
   // 編集ペインを開く
   const openFileEditor = useCallback((filePath: string, content: string) => {
-    setEditingFile({ path: filePath, content });
+    setEditingFile({ path: filePath, content, originalContent: content });
   }, []);
+
+  const pendingFileDiff = useMemo(() => {
+    if (!pendingFileWrite) return null;
+    const originalLines = splitDiffLines(pendingFileWrite.originalContent);
+    const nextLines = splitDiffLines(pendingFileWrite.nextContent);
+    let prefix = 0;
+    while (
+      prefix < originalLines.length &&
+      prefix < nextLines.length &&
+      originalLines[prefix] === nextLines[prefix]
+    ) {
+      prefix += 1;
+    }
+
+    let suffix = 0;
+    while (
+      suffix < originalLines.length - prefix &&
+      suffix < nextLines.length - prefix &&
+      originalLines[originalLines.length - 1 - suffix] === nextLines[nextLines.length - 1 - suffix]
+    ) {
+      suffix += 1;
+    }
+
+    const originalChanged = originalLines.slice(prefix, originalLines.length - suffix);
+    const nextChanged = nextLines.slice(prefix, nextLines.length - suffix);
+
+    return {
+      originalLineCount: originalLines.length,
+      nextLineCount: nextLines.length,
+      prefix,
+      suffix,
+      originalChanged,
+      nextChanged,
+      isChanged: pendingFileWrite.originalContent !== pendingFileWrite.nextContent,
+    };
+  }, [pendingFileWrite]);
 
   // ── セッション内モデル別統計（機能4）──
   const sessionModelStats = useMemo((): SessionModelStat[] => {
@@ -1313,10 +1388,10 @@ function App() {
                               className="inline-file-btn apply"
                               onClick={() => {
                                 const content = isEditing ? inlineEditing[filePath] : fc.content;
-                                handleWriteFile(filePath, content);
+                                handleWriteFile(filePath, content, fc.content);
                               }}
                             >
-                              💾 Apply
+                              💾 保存前に確認
                             </button>
                           </div>
                         </div>
@@ -2496,9 +2571,9 @@ function App() {
                   <>
                     <button
                       className="file-viewer-btn primary"
-                      onClick={() => handleWriteFile(editingFile.path, editingFile.content)}
+                      onClick={() => handleWriteFile(editingFile.path, editingFile.content, editingFile.originalContent)}
                     >
-                      💾 保存して開く
+                      💾 差分を確認して保存
                     </button>
                     <button
                       className="file-viewer-btn"
@@ -2567,6 +2642,49 @@ function App() {
                 <span>{fileContents[activeFileTab]?.content?.split('\n').length || 0} 行</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── File Write Diff Confirmation ── */}
+      {pendingFileWrite && pendingFileDiff && (
+        <div className="file-diff-overlay" onClick={handleCancelWriteFile}>
+          <div className="file-diff-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="file-diff-header">
+              <span>📑 保存前の差分確認</span>
+              <span className="file-diff-path" title={pendingFileWrite.path}>{pendingFileWrite.path}</span>
+            </div>
+            <div className="file-diff-summary">
+              {pendingFileDiff.isChanged
+                ? `先頭 ${pendingFileDiff.prefix} 行・末尾 ${pendingFileDiff.suffix} 行は変更なし / ${pendingFileDiff.originalLineCount} → ${pendingFileDiff.nextLineCount} 行`
+                : '変更はありません。保存は不要です。'}
+            </div>
+            <div className="file-diff-grid">
+              <section className="file-diff-column">
+                <div className="file-diff-column-title">変更前</div>
+                <pre className="file-diff-pre removed">
+                  {formatDiffLines(pendingFileDiff.originalChanged, pendingFileDiff.prefix + 1, '- ')}
+                </pre>
+              </section>
+              <section className="file-diff-column">
+                <div className="file-diff-column-title">変更後</div>
+                <pre className="file-diff-pre added">
+                  {formatDiffLines(pendingFileDiff.nextChanged, pendingFileDiff.prefix + 1, '+ ')}
+                </pre>
+              </section>
+            </div>
+            <div className="file-diff-actions">
+              <button className="file-diff-btn" onClick={handleCancelWriteFile}>
+                キャンセル
+              </button>
+              <button
+                className="file-diff-btn primary"
+                onClick={handleConfirmWriteFile}
+                disabled={!pendingFileDiff.isChanged}
+              >
+                保存する
+              </button>
+            </div>
           </div>
         </div>
       )}

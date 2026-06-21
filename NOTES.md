@@ -1,5 +1,11 @@
 # Torii — 未決事項・設計メモ
 
+## 2026-06-21 Webview直保存の差分確認化
+
+- `webview/src/App.tsx`: ファイルビューアの保存を即時実行から差分確認モーダル経由に変更
+- `webview/src/styles.css`: 変更前 / 変更後の2カラム比較表示を追加
+- 直接保存時の体験を、Agent の `write_file` / `replace_in_file` と同じ「確認してから適用」に寄せた
+
 ## 2026-06-13 UX改善分析 + Codex型エージェントアプリ化の検討
 
 コードベース全体（App.tsx / server.ts / tools.ts / agentLoop.ts / provider.ts）を精査した結果。

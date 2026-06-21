@@ -87,6 +87,7 @@
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - **ストリーミング応答**: SSEによるリアルタイム表示
 - **承認フロー**: コマンド実行・ファイル書き込み時のワンクリック承認UI
+- **Webviewファイル保存**: 保存前に差分確認モーダルを表示し、ユーザーが適用を選んだ場合のみ書き込む
 - **ライセンス認証**: LemonSqueezy連携（activate/validate）・trial/valid/grace/expired分岐・24hキャッシュ・7日間オフライン猶予
 - **コンテキストウィンドウ管理**: トークン推定・上限80%超で警告・超過時に古メッセージ自動削除
 - **Agent予算制御**: チャットと同じ予算判定・モデル別上限フォールバックをAgent側にも適用
