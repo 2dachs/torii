@@ -27,6 +27,7 @@
 - DeepSeek / Anthropic / Gemini の現行単価へ更新し、OpenRouter は API の current pricing を使うように変更済み
 - OpenRouter 価格API取得を起動時に待たないようにして、0.5.0 の起動ハングリスクを修正済み
 - 巨大なアクティブファイルをWebviewへ丸ごと送らないようにし、クリック不能・ウィンドウ応答停止リスクを修正済み
+- esbuild出力の長行を制限し、`dist/ext/extension.js` を開いた場合のVS Code応答停止リスクを修正済み
 
 ### 未実装
 

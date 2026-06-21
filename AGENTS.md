@@ -167,6 +167,10 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **0.5.2 VS Code応答停止修正**:
+  - **`package.json`**: esbuild の `compile` / `watch` に `--line-limit=120` を追加。バンドル済み `dist/ext/extension.js` の最大行長が数十万文字になり、VS Codeエディタ/Rendererが応答停止するリスクを解消
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.3` へ更新
+
 - **0.5.1 Webview応答停止修正**:
   - **`src/webview/provider.ts`**: アクティブエディタ本文・選択範囲をWebviewへ送る際に最大20万文字へ制限。`dist/ext/extension.js` のような巨大ファイルを開いた状態でToriiを表示しても、巨大な `postMessage` によるUI停止が起きにくいよう修正
   - **`webview/src/App.tsx`**: 添付コンテキストが切り詰められた場合にUIと送信文面へ明示するよう変更

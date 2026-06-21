@@ -2,7 +2,7 @@
   "name": "torii",
   "displayName": "Torii — AI Coding Agent for VS Code",
   "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "publisher": "pettal",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -366,8 +366,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile && npm run build:webview",
-    "compile": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\"",
-    "watch": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" --watch",
+    "compile": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --line-limit=120 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\"",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --line-limit=120 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" --watch",
     "build:webview": "cd webview && npm run build",
     "dev:webview": "cd webview && npm run dev",
     "lint": "eslint src --ext ts,tsx"
