@@ -167,6 +167,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **0.5.1 Webview応答停止修正**:
+  - **`src/webview/provider.ts`**: アクティブエディタ本文・選択範囲をWebviewへ送る際に最大20万文字へ制限。`dist/ext/extension.js` のような巨大ファイルを開いた状態でToriiを表示しても、巨大な `postMessage` によるUI停止が起きにくいよう修正
+  - **`webview/src/App.tsx`**: 添付コンテキストが切り詰められた場合にUIと送信文面へ明示するよう変更
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.2` へ更新
+
 - **0.5.0 起動ハング修正**:
   - **`src/backend/server.ts`**: 起動時に OpenRouter 価格API取得を `await` していた処理をバックグラウンド実行に変更。ネットワーク待ちで VS Code 拡張ホストが応答不能になるリスクを解消
   - **`package.json` / `package-lock.json`**: 修正版として `0.5.1` へ更新

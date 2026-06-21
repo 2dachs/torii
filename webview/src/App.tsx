@@ -455,7 +455,17 @@ function App() {
   // ── クイック切替 & 添付 ──
   const [showQuickSwitch, setShowQuickSwitch] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [editorInfo, setEditorInfo] = useState<{ fileName: string; language: string; lineCount: number; content?: string; selectedText?: string } | null>(null);
+  const [editorInfo, setEditorInfo] = useState<{
+    fileName: string;
+    language: string;
+    lineCount: number;
+    content?: string;
+    contentLength?: number;
+    contentTruncated?: boolean;
+    selectedText?: string;
+    selectedTextLength?: number;
+    selectedTextTruncated?: boolean;
+  } | null>(null);
   const [showEditorContext, setShowEditorContext] = useState(false);
   const [editorAttachMode, setEditorAttachMode] = useState<'file' | 'selection'>('file');
 
@@ -1032,7 +1042,13 @@ function App() {
       const selectedText = editorAttachMode === 'selection' && editorInfo.selectedText ? editorInfo.selectedText : '';
       const contextBody = selectedText || (editorInfo.content || textAttachment?.data || '');
       const contextLabel = selectedText ? `選択範囲: ${editorInfo.fileName}` : `現在のファイル: ${editorInfo.fileName}`;
-      content = `${baseContent.replace(fileMentionToken, '').trim()}\n\n--- ${contextLabel} ---\n\`\`\`${editorInfo.language || ''}\n${contextBody}\n\`\`\``;
+      const truncatedNotice =
+        selectedText && editorInfo.selectedTextTruncated
+          ? '\n\n※ 選択範囲が大きいため先頭20万文字のみ添付しています。'
+          : !selectedText && editorInfo.contentTruncated
+          ? '\n\n※ ファイルが大きいため先頭20万文字のみ添付しています。'
+          : '';
+      content = `${baseContent.replace(fileMentionToken, '').trim()}\n\n--- ${contextLabel} ---${truncatedNotice}\n\`\`\`${editorInfo.language || ''}\n${contextBody}\n\`\`\``;
     }
 
     // スラッシュコマンドを処理してモードを決定（ライセンスチェックより前に確定する）
@@ -2366,7 +2382,10 @@ function App() {
       {showEditorContext && editorInfo && (
         <div className="editor-context-bar">
           📝 <span className="ec-filename">{editorInfo.fileName}</span>
-          <span className="ec-meta">{editorInfo.language} · {editorInfo.lineCount}行</span>
+          <span className="ec-meta">
+            {editorInfo.language} · {editorInfo.lineCount}行
+            {editorInfo.contentTruncated ? ' · 先頭20万文字' : ''}
+          </span>
           <button
             className={`ec-mode-btn${editorAttachMode === 'file' ? ' active' : ''}`}
             onClick={() => {

@@ -73,6 +73,36 @@ import {
   CONFIG_COMMAND_ALLOWLIST,
 } from '../constants';
 
+const MAX_EDITOR_CONTEXT_CHARS = 200_000;
+
+function getDocumentLength(doc: vscode.TextDocument): number {
+  if (doc.lineCount === 0) return 0;
+
+  const lastLine = doc.lineAt(doc.lineCount - 1);
+  return doc.offsetAt(lastLine.range.end);
+}
+
+function getDocumentPrefix(doc: vscode.TextDocument, maxChars: number): string {
+  const totalLength = getDocumentLength(doc);
+  const end = doc.positionAt(Math.min(totalLength, maxChars));
+  return doc.getText(new vscode.Range(new vscode.Position(0, 0), end));
+}
+
+function getSelectionPreview(doc: vscode.TextDocument, selection: vscode.Selection, maxChars: number): string {
+  if (selection.isEmpty) return '';
+
+  const startOffset = doc.offsetAt(selection.start);
+  const endOffset = doc.offsetAt(selection.end);
+  const previewEnd = doc.positionAt(Math.min(endOffset, startOffset + maxChars));
+  return doc.getText(new vscode.Range(selection.start, previewEnd));
+}
+
+function getSelectionLength(doc: vscode.TextDocument, selection: vscode.Selection): number {
+  if (selection.isEmpty) return 0;
+
+  return Math.max(0, doc.offsetAt(selection.end) - doc.offsetAt(selection.start));
+}
+
 export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _context: vscode.ExtensionContext;
@@ -327,7 +357,10 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
 
     const doc = editor.document;
     const fileName = vscode.workspace.asRelativePath(doc.uri);
-    const content = doc.getText();
+    const contentLength = getDocumentLength(doc);
+    const selectedTextLength = getSelectionLength(doc, editor.selection);
+    const content = getDocumentPrefix(doc, MAX_EDITOR_CONTEXT_CHARS);
+    const selectedText = getSelectionPreview(doc, editor.selection, MAX_EDITOR_CONTEXT_CHARS);
 
     this._view.webview.postMessage({
       command: MSG_EDITOR_CONTENT,
@@ -335,8 +368,12 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         fileName,
         language: doc.languageId,
         content,
+        contentLength,
+        contentTruncated: contentLength > MAX_EDITOR_CONTEXT_CHARS,
         lineCount: doc.lineCount,
-        selectedText: doc.getText(editor.selection),
+        selectedText,
+        selectedTextLength,
+        selectedTextTruncated: selectedTextLength > MAX_EDITOR_CONTEXT_CHARS,
       },
     });
   }
