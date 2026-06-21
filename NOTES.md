@@ -22,8 +22,16 @@
 - Agent の自動タスク生成はライセンス確認後に実行するよう修正済み
 - 予算集計の workspaceId を統一済み
 - 上位モデル再実行の設定反映を修正済み
+- OpenRouter の最新モデル検索と GLM 5.2 / MiniMax M3 プリセットを追加済み
 
 ### 未実装
+
+## 2026-06-21 OpenRouter最新モデル設定対応
+
+- `src/constants.ts`: `z-ai/glm-5.2` / `minimax/minimax-m3` をOpenRouterプリセットに追加し、既知単価でコスト計算に反映
+- `src/webview/provider.ts`: OpenRouterモデル一覧をExtension Host側で取得してWebviewへ返す経路を追加
+- `webview/src/App.tsx`: OpenRouter設定でモデル名・ID検索からモデルスロットへ登録できるUIを追加。従来の自由入力も維持
+- `webview/src/styles.css`: 検索結果リストの表示スタイルを追加
 
 ## 2026-06-21 Webview直保存の差分確認化
 

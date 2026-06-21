@@ -225,6 +225,9 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
           .catch(() => {});
         await this._configWriteQueue;
         break;
+      case 'loadOpenRouterModels':
+        await this._handleLoadOpenRouterModels();
+        break;
       case MSG_EDITOR_CONTENT:
         await this._sendEditorContent(vscode.window.activeTextEditor);
         break;
@@ -461,6 +464,23 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       command: MSG_LOAD_CHAT_HISTORY,
       data: history,
     });
+  }
+
+  private async _handleLoadOpenRouterModels() {
+    if (!this._view) return;
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models');
+      if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.status}`);
+      }
+      const data = await response.json();
+      this._view.webview.postMessage({ command: 'openRouterModels', data });
+    } catch (err: any) {
+      this._view.webview.postMessage({
+        command: 'openRouterModels',
+        error: err?.message || 'OpenRouterモデル一覧を取得できませんでした',
+      });
+    }
   }
 
   private async _handleSendMessage(

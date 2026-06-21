@@ -230,7 +230,7 @@
         "torii.openrouter.model": {
           "type": "string",
           "default": "openai/gpt-4o",
-          "description": "OpenRouter モデルID（例: openai/gpt-4o, anthropic/claude-3-5-sonnet, meta-llama/llama-3.1-8b-instruct）"
+          "description": "OpenRouter モデルID（例: z-ai/glm-5.2, minimax/minimax-m3, openai/gpt-4o, anthropic/claude-3-5-sonnet）"
         },
         "torii.openrouter.maxTokens": {
           "type": "number",

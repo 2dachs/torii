@@ -134,7 +134,10 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     chatPath: '/chat/completions',
     authPrefix: 'Bearer',
     description: '1つのAPIキーで GPT-4o・Claude・Llama 等を使い分けられるゲートウェイ。openrouter.ai でキー取得。',
-    models: [],
+    models: [
+      { id: 'z-ai/glm-5.2', name: 'GLM 5.2', tier: 'opus', description: 'OpenRouter経由の1M context対応エージェント向けモデル', supportsImages: false, inputCostPer1M: 1.20, outputCostPer1M: 4.10 },
+      { id: 'minimax/minimax-m3', name: 'MiniMax M3', tier: 'pro', description: 'OpenRouter経由の1M context対応マルチモーダルモデル', supportsImages: true, inputCostPer1M: 0.30, outputCostPer1M: 1.20 },
+    ],
   },
 };
 

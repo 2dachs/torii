@@ -55,7 +55,7 @@
 ## 課金モデル（フリーミアム）
 
 ### 無料（OSS）
-- マルチプロバイダー対応（OpenAI / DeepSeek / Anthropic / Ollama）
+- マルチプロバイダー対応（OpenAI / DeepSeek / Anthropic / Ollama / Gemini / OpenRouter）
 - 予算管理・JPY表示・予算バー
 - 自動ルーティング（PromptRouter）
 - チャットモード
@@ -127,6 +127,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 実装済み機能
 
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
+- OpenRouterモデル検索: 最新モデル一覧を取得して検索・スロット登録可能。GLM 5.2 / MiniMax M3 はプリセット単価込みで対応
 - 予算管理: 月間USD/JPY換算・バー表示・スコープ切替（グローバル/プロジェクト）
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
 - 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/難易度/予算に応じてモデル自動切替
@@ -163,6 +164,12 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ---
 
 ## 修正・変更ログ
+
+### 2026-06-21
+- **OpenRouter最新モデル設定対応**:
+  - **`src/constants.ts`**: `z-ai/glm-5.2` / `minimax/minimax-m3` をOpenRouterプリセットに追加。OpenRouter公式モデルAPIの単価に合わせ、GLM 5.2 は input $1.20 / output $4.10 per 1M、MiniMax M3 は input $0.30 / output $1.20 per 1M としてコスト計算に反映
+  - **`src/webview/provider.ts` / `webview/src/App.tsx`**: 設定画面のOpenRouterモデル欄で、Extension Host経由でOpenRouterモデル一覧を取得し、モデル名・ID検索からスロット登録できるUIを追加。OpenRouterの自由入力は維持
+  - **`webview/src/styles.css`**: モデル検索結果のコンパクトな一覧表示を追加
 
 ### 2026-06-12
 - **Proプラン本番運用への切り替え**:

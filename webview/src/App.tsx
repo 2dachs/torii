@@ -61,6 +61,12 @@ function getContextTokenLimit(modelId: string): number {
   return key ? CONTEXT_TOKEN_LIMITS[key] : CONTEXT_TOKEN_LIMITS.default;
 }
 
+function formatOpenRouterPrice(value?: string): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return '?';
+  return `$${(numeric * 1_000_000).toFixed(numeric * 1_000_000 < 1 ? 3 : 2)}`;
+}
+
 function ToriiIcon({ size = 20, className }: { size?: number; className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width={size} height={size} className={className} style={{ flexShrink: 0 }}>
@@ -120,6 +126,20 @@ type MarkdownBlock =
   | { type: 'list'; ordered: boolean; items: string[] }
   | { type: 'quote'; text: string }
   | { type: 'code'; lang: string; code: string };
+
+type OpenRouterCatalogModel = {
+  id: string;
+  name: string;
+  context_length?: number;
+  created?: number;
+  architecture?: {
+    input_modalities?: string[];
+  };
+  pricing?: {
+    prompt?: string;
+    completion?: string;
+  };
+};
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -458,6 +478,10 @@ function App() {
   const [expandedProviderConfig, setExpandedProviderConfig] = useState<string | null>(null);
   const [taskListExpanded, setTaskListExpanded] = useState(false);
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterCatalogModel[]>([]);
+  const [openRouterModelQuery, setOpenRouterModelQuery] = useState('');
+  const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
+  const [openRouterModelsError, setOpenRouterModelsError] = useState<string | null>(null);
 
   const [inputAreaHeight, setInputAreaHeight] = useState(200);
 
@@ -558,6 +582,21 @@ function App() {
         case 'serverPort':
           if (msg.port) setServerPort(msg.port);
           break;
+        case 'openRouterModels': {
+          setOpenRouterModelsLoading(false);
+          const openRouterMessage = msg as any;
+          if (openRouterMessage.error) {
+            setOpenRouterModelsError(openRouterMessage.error);
+            break;
+          }
+          const models = Array.isArray(openRouterMessage.data?.data) ? openRouterMessage.data.data as OpenRouterCatalogModel[] : [];
+          setOpenRouterModels(
+            models
+              .filter((model) => model.id && model.name)
+              .sort((a, b) => (b.created || 0) - (a.created || 0))
+          );
+          break;
+        }
         case 'loadTasks':
           if (Array.isArray(msg.data)) {
             const loadedTasks = msg.data as Task[];
@@ -1103,6 +1142,39 @@ function App() {
     setShowQuickSwitch(false);
   }, [serverConfig.providers]);
 
+  const loadOpenRouterModels = useCallback(async () => {
+    if (openRouterModelsLoading) return;
+    setOpenRouterModelsLoading(true);
+    setOpenRouterModelsError(null);
+    vscode?.postMessage({ command: 'loadOpenRouterModels' });
+  }, [openRouterModelsLoading]);
+
+  const useOpenRouterCatalogModel = useCallback((modelId: string) => {
+    const settings = getProvider('openrouter');
+    const currentSlots = settings.modelSlots || ['', '', ''];
+    const emptySlotIndex = currentSlots.findIndex((slot) => !slot);
+    const replacementIndex = emptySlotIndex >= 0 ? emptySlotIndex : 0;
+    const normalizedSlots = currentSlots.includes(modelId)
+      ? currentSlots
+      : currentSlots.map((slot, index) => (index === replacementIndex ? modelId : slot));
+    const currentMainProvider = serverConfig.mainProvider || serverConfig.provider;
+    const isMain = currentMainProvider === 'openrouter';
+
+    updateProvider('openrouter', { model: modelId, modelSlots: normalizedSlots });
+    if (isMain) {
+      setServerConfig(prev => ({ ...prev, mainModel: modelId }));
+    }
+    vscode?.postMessage({
+      command: 'updateProviderConfig',
+      providerId: 'openrouter',
+      config: {
+        model: modelId,
+        modelSlots: normalizedSlots,
+        ...(isMain ? { mainModel: modelId, mainProvider: 'openrouter' } : {}),
+      },
+    });
+  }, [getProvider, serverConfig.mainProvider, serverConfig.provider, updateProvider]);
+
   // ── APIキー保存（プロバイダー別） ──
   const handleSaveApiKey = useCallback(
     (providerId: string) => {
@@ -1472,6 +1544,13 @@ function App() {
     if (!query) return tasks;
     return tasks.filter((task) => task.title.toLowerCase().includes(query));
   }, [tasks, taskSearchQuery]);
+  const filteredOpenRouterModels = useMemo(() => {
+    const query = openRouterModelQuery.trim().toLowerCase();
+    const models = query
+      ? openRouterModels.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(query))
+      : openRouterModels;
+    return models.slice(0, 12);
+  }, [openRouterModels, openRouterModelQuery]);
 
   // 全プロバイダー×モデルの結合オプション（節約モデル選択用）
   const allModelOptions = useMemo(() =>
@@ -2369,7 +2448,7 @@ function App() {
               {(() => {
                 const mainPid = serverConfig.mainProvider || serverConfig.provider;
                 const mainProviderDef = serverConfig.providers.find(p => p.id === mainPid);
-                const hasFreeInput = !mainProviderDef?.models || mainProviderDef.models.length === 0;
+                const hasFreeInput = mainPid === 'openrouter' || !mainProviderDef?.models || mainProviderDef.models.length === 0;
                 if (hasFreeInput) {
                   return (
                     <input
@@ -2450,6 +2529,54 @@ function App() {
                           <label>モデル</label>
                           {p.id === 'openrouter' ? (
                             <div className="openrouter-slots">
+                              <div className="openrouter-catalog">
+                                <div className="openrouter-catalog-controls">
+                                  <input
+                                    className="settings-input"
+                                    type="text"
+                                    placeholder="OpenRouterモデルを検索（例: GLM 5.2 / MiniMax M3）"
+                                    value={openRouterModelQuery}
+                                    onChange={(e) => {
+                                      setOpenRouterModelQuery(e.target.value);
+                                      if (openRouterModels.length === 0 && !openRouterModelsLoading) {
+                                        void loadOpenRouterModels();
+                                      }
+                                    }}
+                                    onFocus={() => {
+                                      if (openRouterModels.length === 0) void loadOpenRouterModels();
+                                    }}
+                                  />
+                                  <button className="btn btn-secondary" onClick={() => void loadOpenRouterModels()} disabled={openRouterModelsLoading}>
+                                    {openRouterModelsLoading ? '取得中' : '更新'}
+                                  </button>
+                                </div>
+                                {openRouterModelsError && <div className="openrouter-catalog-error">{openRouterModelsError}</div>}
+                                {filteredOpenRouterModels.length > 0 && (
+                                  <div className="openrouter-model-list">
+                                    {filteredOpenRouterModels.map((model) => {
+                                      const inputPrice = formatOpenRouterPrice(model.pricing?.prompt);
+                                      const outputPrice = formatOpenRouterPrice(model.pricing?.completion);
+                                      const supportsImage = model.architecture?.input_modalities?.includes('image');
+                                      return (
+                                        <div key={model.id} className="openrouter-model-row">
+                                          <div className="openrouter-model-main">
+                                            <span className="openrouter-model-name">{model.name}</span>
+                                            <span className="openrouter-model-id">{model.id}</span>
+                                          </div>
+                                          <span className="openrouter-model-meta">
+                                            {supportsImage ? '画像対応 · ' : ''}
+                                            {model.context_length ? `${model.context_length.toLocaleString()} ctx · ` : ''}
+                                            {inputPrice}/{outputPrice}
+                                          </span>
+                                          <button className="slot-use-btn" onClick={() => useOpenRouterCatalogModel(model.id)}>
+                                            使用
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                               {[0, 1, 2].map((i) => {
                                 const slots = settings.modelSlots || ['', '', ''];
                                 const slotVal = slots[i] || '';

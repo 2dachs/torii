@@ -6,7 +6,8 @@
 
 ## 機能
 
-- **マルチプロバイダー対応** — OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini を切り替えて使用可能
+- **マルチプロバイダー対応** — OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter を切り替えて使用可能
+- **OpenRouterモデル検索** — GLM 5.2 / MiniMax M3 など新しいモデルを検索してスロット登録可能
 - **予算管理（JPY/USD表示切替）** — 月間利用コストを円またはドルで表示。バーグラフで予算消費を可視化
 - **ローカルLLM自動ルーティング** — 機密キーワードを含むプロンプトを自動的に Ollama（ローカル）へ転送。APIキー・ソースコードがクラウドに送信されない
 - **エージェントループ** — ファイル読み書き・コマンド実行をワンクリック承認で自律実行
