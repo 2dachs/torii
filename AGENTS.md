@@ -167,6 +167,10 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **予算バー表示の数値化**:
+  - **`webview/src/budget.js` / `webview/src/budget.d.ts`**: 予算表示の組み立てを純関数化し、コスト・上限・percent・tooltip を数値スナップショットで管理するよう変更
+  - **`webview/src/App.tsx`**: `receiveMessage` と `agentEvent.done` の予算更新を共通ヘルパーに統合。Agent完了時は単発コストではなく累計コストを表示するよう修正
+
 - **料金テーブル更新**:
   - **`src/constants.ts`**: DeepSeek / Anthropic / Gemini の現行単価へ更新。DeepSeek は `deepseek-chat` / `deepseek-reasoner` を現行の V4 Flash / V4 Pro 相当として扱い、Anthropic Opus 4.7 は $5 / $25、Gemini 2.5 Flash は $0.30 / $2.50、Gemini 2.5 Pro は 200k tokens 以下 $1.25 / $10、超過時 $2.50 / $15 に更新
   - **`src/backend/lib/openRouterPricing.ts`**: OpenRouter の `GET /api/v1/models` を起動時に取得して価格キャッシュ化。OpenRouter経由の DeepSeek を含む任意モデルの current pricing をそのまま予算計算に反映

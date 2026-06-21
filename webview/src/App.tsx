@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
 import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
+import { buildBudgetMeterState } from './budget.js';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -418,8 +419,13 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [serverPort, setServerPort] = useState<number | null>(null);
-  const [budgetInfo, setBudgetInfo] = useState<string>('');
-  const [budgetCostJpy, setBudgetCostJpy] = useState(0);
+  const [budgetTooltip, setBudgetTooltip] = useState<string>('');
+  const [budgetMeter, setBudgetMeter] = useState(() => buildBudgetMeterState({
+    currentCostUsd: 0,
+    monthlyBudgetUsd: 0,
+    exchangeRate: 150,
+    displayCurrency: 'JPY',
+  }));
 
   // ── エージェントモード ──
   const [agentMode, setAgentMode] = useState<AgentMode>('chat');
@@ -654,18 +660,13 @@ function App() {
             }
 
             if (res.totalCostThisMonth !== undefined) {
-              const budget = res.monthlyBudget ?? serverConfig.monthlyBudget;
-              const rate = serverConfig.exchangeRate || 150;
-              const costJpyNum = res.totalCostThisMonthJpy !== undefined
-                ? res.totalCostThisMonthJpy
-                : res.totalCostThisMonth * rate;
-              const budgetJpy = (budget * rate).toFixed(0);
-              setBudgetCostJpy(costJpyNum);
-              setBudgetInfo(
-                budget > 0
-                  ? `$${res.totalCostThisMonth.toFixed(2)}(¥${costJpyNum.toFixed(0)}) / $${budget.toFixed(0)}(¥${budgetJpy}) (${res.budgetPercent?.toFixed(0) ?? 0}%)`
-                  : `$${res.totalCostThisMonth.toFixed(2)}(¥${costJpyNum.toFixed(0)})`
-              );
+              setBudgetMeter(buildBudgetMeterState({
+                currentCostUsd: res.totalCostThisMonth,
+                monthlyBudgetUsd: res.monthlyBudget ?? serverConfig.monthlyBudget,
+                exchangeRate: res.exchangeRate || serverConfig.exchangeRate || 150,
+                displayCurrency: serverConfig.displayCurrency === 'USD' ? 'USD' : 'JPY',
+              }));
+              setBudgetTooltip('');
             }
             if (res.invalidApiKey) {
               setShowSettings(true);
@@ -734,7 +735,7 @@ function App() {
           }
           break;
         case 'updateBudget':
-          if (msg.message) setBudgetInfo(msg.message);
+          if (msg.message) setBudgetTooltip(msg.message);
           break;
         case 'settingsConfig':
           if (msg.data) {
@@ -764,18 +765,13 @@ function App() {
             }
             setProviderSettings(initial);
             // 初期予算表示
-            if (config.currentBudgetUsd !== undefined && config.currentBudgetUsd > 0) {
-              const rate = config.exchangeRate || 150;
-              const cost = config.currentBudgetUsd;
-              const budget = config.monthlyBudget;
-              const costJpyNum = cost * rate;
-              setBudgetCostJpy(costJpyNum);
-              setBudgetInfo(
-                budget > 0
-                  ? `$${cost.toFixed(2)}(¥${costJpyNum.toFixed(0)}) / $${budget.toFixed(0)}(¥${(budget * rate).toFixed(0)}) (${((cost / budget) * 100).toFixed(0)}%)`
-                  : `$${cost.toFixed(2)}(¥${costJpyNum.toFixed(0)})`
-              );
-            }
+            setBudgetMeter(buildBudgetMeterState({
+              currentCostUsd: config.currentBudgetUsd ?? 0,
+              monthlyBudgetUsd: config.monthlyBudget,
+              exchangeRate: config.exchangeRate || 150,
+              displayCurrency: config.displayCurrency === 'USD' ? 'USD' : 'JPY',
+            }));
+            setBudgetTooltip('');
           }
           break;
         case 'editorContent':
@@ -852,14 +848,15 @@ function App() {
             // 予算更新（数値stateと表示文字列を両方更新）
             if (evt.costUsd > 0) {
               const rate = serverConfig.exchangeRate || 150;
-              const budget = serverConfig.monthlyBudget;
-              const costJpy = evt.costJpy ?? evt.costUsd * rate;
-              setBudgetCostJpy((prev) => prev + costJpy);
-              setBudgetInfo(
-                budget > 0
-                  ? `累計 $${evt.costUsd.toFixed(4)}(¥${costJpy.toFixed(0)})`
-                  : `$${evt.costUsd.toFixed(4)}(¥${costJpy.toFixed(0)})`
-              );
+              const deltaJpy = evt.costJpy ?? evt.costUsd * rate;
+              setBudgetMeter((prev) => buildBudgetMeterState({
+                currentCostUsd: (prev.currentCostJpy + deltaJpy) / rate,
+                monthlyBudgetUsd: serverConfig.monthlyBudget,
+                exchangeRate: rate,
+                displayCurrency: serverConfig.displayCurrency === 'USD' ? 'USD' : 'JPY',
+                prefixText: '累計',
+              }));
+              setBudgetTooltip('');
             }
           } else if (evt.type === 'error') {
             setMessages((prev) => [
@@ -1577,12 +1574,7 @@ function App() {
   const canAttachImages = _canAttachImages;
 
   // ── 予算バー計算 ──
-  const exchangeRate = serverConfig.exchangeRate || 150;
-  const budgetLimitJpy = Math.round(serverConfig.monthlyBudget * exchangeRate);
-  const budgetPercent = budgetLimitJpy > 0 ? (budgetCostJpy / budgetLimitJpy) * 100 : 0;
-  const isCurrencyUSD = serverConfig.displayCurrency === 'USD';
-  const budgetCostUsd = budgetCostJpy / exchangeRate;
-  const budgetLimitUsd = serverConfig.monthlyBudget;
+  const budgetPercent = budgetMeter.budgetPercent;
   const contextTokenCount = useMemo(() => {
     const messageTokens = messages.reduce((sum, msg) => sum + estimateContextTokens(msg.content || ''), 0);
     return messageTokens + estimateContextTokens(streamingText) + estimateContextTokens(input);
@@ -2045,10 +2037,8 @@ function App() {
             style={{ width: `${Math.min(budgetPercent, 100)}%` }}
           />
         </div>
-        <span className="budget-meter-label" title={budgetInfo}>
-          {isCurrencyUSD
-            ? `$${budgetCostUsd.toFixed(2)} / $${budgetLimitUsd > 0 ? budgetLimitUsd.toFixed(0) : '∞'}`
-            : `¥${Math.round(budgetCostJpy).toLocaleString()} / ¥${budgetLimitJpy > 0 ? budgetLimitJpy.toLocaleString() : '∞'}`}
+        <span className="budget-meter-label" title={budgetTooltip || budgetMeter.tooltip}>
+          {budgetMeter.label}
         </span>
         {budgetPercent >= 80 && <span className="budget-meter-warn">⚠</span>}
         <button
