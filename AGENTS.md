@@ -128,6 +128,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
 - OpenRouterモデル検索: 最新モデル一覧を取得して検索・スロット登録可能。GLM 5.2 / MiniMax M3 はプリセット単価込みで対応
+- 価格更新: DeepSeek / Anthropic / Gemini の現行単価へ追従し、OpenRouter はAPIの current pricing を予算計算へ反映
 - 予算管理: 月間USD/JPY換算・バー表示・スコープ切替（グローバル/プロジェクト）
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
 - 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/難易度/予算に応じてモデル自動切替
@@ -166,6 +167,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **料金テーブル更新**:
+  - **`src/constants.ts`**: DeepSeek / Anthropic / Gemini の現行単価へ更新。DeepSeek は `deepseek-chat` / `deepseek-reasoner` を現行の V4 Flash / V4 Pro 相当として扱い、Anthropic Opus 4.7 は $5 / $25、Gemini 2.5 Flash は $0.30 / $2.50、Gemini 2.5 Pro は 200k tokens 以下 $1.25 / $10、超過時 $2.50 / $15 に更新
+  - **`src/backend/lib/openRouterPricing.ts`**: OpenRouter の `GET /api/v1/models` を起動時に取得して価格キャッシュ化。OpenRouter経由の DeepSeek を含む任意モデルの current pricing をそのまま予算計算に反映
+  - **`src/backend/server.ts`**: コスト計算をモデル別の current pricing に切り替え。OpenRouter は API キャッシュ優先、Gemini Pro は長文入力時の高価格帯を反映
+
 - **OpenRouter最新モデル設定対応**:
   - **`src/constants.ts`**: `z-ai/glm-5.2` / `minimax/minimax-m3` をOpenRouterプリセットに追加。OpenRouter公式モデルAPIの単価に合わせ、GLM 5.2 は input $1.20 / output $4.10 per 1M、MiniMax M3 は input $0.30 / output $1.20 per 1M としてコスト計算に反映
   - **`src/webview/provider.ts` / `webview/src/App.tsx`**: 設定画面のOpenRouterモデル欄で、Extension Host経由でOpenRouterモデル一覧を取得し、モデル名・ID検索からスロット登録できるUIを追加。OpenRouterの自由入力は維持

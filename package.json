@@ -143,8 +143,8 @@
             "deepseek-reasoner"
           ],
           "enumDescriptions": [
-            "DeepSeek Flash - 高速・低コスト日常コーディング向け",
-            "DeepSeek Pro - 高度な推論・設計向け"
+            "DeepSeek V4 Flash - 高速・低コスト日常コーディング向け (deepseek-v4-flash 互換)",
+            "DeepSeek V4 Pro - 高度な推論・設計向け (deepseek-v4-pro 互換)"
           ],
           "description": "DeepSeek モデル"
         },

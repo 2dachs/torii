@@ -23,6 +23,7 @@
 - 予算集計の workspaceId を統一済み
 - 上位モデル再実行の設定反映を修正済み
 - OpenRouter の最新モデル検索と GLM 5.2 / MiniMax M3 プリセットを追加済み
+- DeepSeek / Anthropic / Gemini の現行単価へ更新し、OpenRouter は API の current pricing を使うように変更済み
 
 ### 未実装
 

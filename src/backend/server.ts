@@ -12,6 +12,7 @@ import { PromptRouter } from './lib/router';
 import type { RouteResult } from './lib/router';
 import { loadCustomRules, getAllRules, addCustomRule, updateCustomRule, deleteCustomRule } from './lib/routingRules';
 import { loadPettalConfig, savePettalConfig } from './lib/pettalConfig';
+import { getOpenRouterPricing, refreshOpenRouterPricingCache } from './lib/openRouterPricing';
 import { runAgentLoop } from './agentLoop';
 import type { AgentEvent } from './agentLoop';
 import { resolveApproval } from './approvalManager';
@@ -687,26 +688,71 @@ async function callOllamaStream(
 /**
  * コスト計算（プロバイダー・モデル別）
  */
+function resolveModelCost(
+  providerId: ProviderId,
+  modelId: string,
+  promptTokens: number,
+): { inputCostPer1M: number; outputCostPer1M: number } {
+  if (providerId === 'openrouter') {
+    const dynamicPricing = getOpenRouterPricing(modelId);
+    if (dynamicPricing) {
+      return {
+        inputCostPer1M: dynamicPricing.inputCostPer1M,
+        outputCostPer1M: dynamicPricing.outputCostPer1M,
+      };
+    }
+  }
+
+  const provider = PROVIDERS[providerId];
+  if (!provider) {
+    return { inputCostPer1M: 5, outputCostPer1M: 15 };
+  }
+
+  const model = provider.models.find((m) => m.id === modelId);
+  if (!model) {
+    return { inputCostPer1M: 5, outputCostPer1M: 15 };
+  }
+
+  if (providerId === 'gemini' && modelId === 'gemini-2.5-pro') {
+    const isLongContext = promptTokens > 200_000;
+    return isLongContext
+      ? { inputCostPer1M: 2.50, outputCostPer1M: 15.00 }
+      : { inputCostPer1M: 1.25, outputCostPer1M: 10.00 };
+  }
+
+  return {
+    inputCostPer1M: model.inputCostPer1M,
+    outputCostPer1M: model.outputCostPer1M,
+  };
+}
+
 function calculateCost(
   providerId: ProviderId,
   modelId: string,
   promptTokens: number,
   completionTokens: number,
 ): number {
-  // constants.ts の PROVIDERS 定義からモデル単価を動的に取得
-  const provider = PROVIDERS[providerId];
-  if (!provider) {
-    return (promptTokens / 1_000_000) * 5 + (completionTokens / 1_000_000) * 15;
-  }
-  const model = provider.models.find((m) => m.id === modelId);
-  if (!model) {
-    return (promptTokens / 1_000_000) * 5 + (completionTokens / 1_000_000) * 15;
-  }
-  return (promptTokens / 1_000_000) * model.inputCostPer1M +
-         (completionTokens / 1_000_000) * model.outputCostPer1M;
+  const pricing = resolveModelCost(providerId, modelId, promptTokens);
+  return (promptTokens / 1_000_000) * pricing.inputCostPer1M +
+         (completionTokens / 1_000_000) * pricing.outputCostPer1M;
 }
 
 function resolveConfiguredModel(provider: ProviderDef, modelId: string): ModelDef {
+  if (provider.id === 'openrouter') {
+    const openRouterModel = getOpenRouterPricing(modelId);
+    if (openRouterModel) {
+      return {
+        id: openRouterModel.id,
+        name: openRouterModel.name,
+        tier: openRouterModel.outputCostPer1M >= 10 ? 'opus' : openRouterModel.outputCostPer1M >= 2 ? 'pro' : 'flash',
+        description: 'OpenRouter catalog model',
+        supportsImages: openRouterModel.supportsImages,
+        inputCostPer1M: openRouterModel.inputCostPer1M,
+        outputCostPer1M: openRouterModel.outputCostPer1M,
+      };
+    }
+  }
+
   return provider.models.find((m) => m.id === modelId) || {
     id: modelId,
     name: modelId,
@@ -815,6 +861,7 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
 
   app = express();
   app.use(express.json({ limit: '30mb' })); // 画像 base64 (最大 10MB → ~13MB) を考慮したサイズ上限
+  await refreshOpenRouterPricingCache();
 
   // セキュリティ: X-Torii-Token ヘッダーによる認証
   // 起動時に生成したランダムトークンを知っているのは Extension Host のみ

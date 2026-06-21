@@ -80,8 +80,8 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     authPrefix: 'Bearer',
     description: 'コスパ最強。日常コーディングに最適',
     models: [
-      { id: 'deepseek-chat', name: 'DeepSeek Flash', tier: 'flash', description: '高速・低コスト、日常コーディング向け', supportsImages: false, inputCostPer1M: 0.27, outputCostPer1M: 1.10 },
-      { id: 'deepseek-reasoner', name: 'DeepSeek Pro', tier: 'pro', description: '高度な推論・設計・複雑な実装向け', supportsImages: false, inputCostPer1M: 0.55, outputCostPer1M: 2.19 },
+      { id: 'deepseek-chat', name: 'DeepSeek V4 Flash', tier: 'flash', description: '高速・低コスト、日常コーディング向け。deepseek-v4-flash 互換', supportsImages: false, inputCostPer1M: 0.14, outputCostPer1M: 0.28 },
+      { id: 'deepseek-reasoner', name: 'DeepSeek V4 Pro', tier: 'pro', description: '高度な推論・設計・複雑な実装向け。deepseek-v4-pro 互換', supportsImages: false, inputCostPer1M: 0.435, outputCostPer1M: 0.87 },
     ],
   },
   anthropic: {
@@ -95,7 +95,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     description: 'コードレビュー・セキュリティ監査に強み',
     models: [
       { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'pro', description: 'バランスの取れた高性能モデル', supportsImages: true, inputCostPer1M: 3, outputCostPer1M: 15 },
-      { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', tier: 'opus', description: 'セキュリティ・アーキテクチャ設計の最高峰', supportsImages: true, inputCostPer1M: 15, outputCostPer1M: 75 },
+      { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', tier: 'opus', description: 'セキュリティ・アーキテクチャ設計の最高峰', supportsImages: true, inputCostPer1M: 5, outputCostPer1M: 25 },
     ],
   },
   ollama: {
@@ -121,8 +121,8 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     authPrefix: 'x-goog-api-key',
     description: '画像読み取りに最適。スクリーンショットを他モデルに渡す橋渡し役として自動利用',
     models: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'flash', description: '画像・マルチモーダル処理に最適 (自動橋渡し)', supportsImages: true, inputCostPer1M: 0.075, outputCostPer1M: 0.30 },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'pro', description: '高精度マルチモーダル処理', supportsImages: true, inputCostPer1M: 1.25, outputCostPer1M: 5.00 },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'flash', description: '画像・マルチモーダル処理に最適 (自動橋渡し)', supportsImages: true, inputCostPer1M: 0.30, outputCostPer1M: 2.50 },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'pro', description: '高精度マルチモーダル処理', supportsImages: true, inputCostPer1M: 1.25, outputCostPer1M: 10.00 },
     ],
   },
   openrouter: {
