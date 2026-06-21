@@ -131,9 +131,7 @@ export async function buildSystemPrompt(
   - ✅ 正しい動作: read_file → replace_in_file/write_file → attempt_completion
 - **ツール呼び出し前に長い前置き説明を書かない**（考えるなら \`<think>\` タグ内のみ）
 - **「調べます」「確認します」「見てみます」と言う前に即座に read_file または search_files を実行せよ**（宣言より先にツールを呼ぶ）
-- **複雑なタスク（3ステップ以上）は最初に \`.torii-todo.md\` にステップリストを write_file で書き出す**
-  例: \`[ ] ステップ1\n[ ] ステップ2\n[ ] ステップ3\`
-  各ステップ完了後は replace_in_file で \`[x]\` に更新する（単純なタスクは不要）
+- **複雑なタスク（3ステップ以上）は最初に手順を整理してから実行する**
 
 ## プロジェクト情報
 プロジェクト名: ${projectName}

@@ -261,7 +261,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ### 2026-05-23
 - **エージェント自律性改善（`src/backend/tools.ts`）**:
-  - システムプロンプトの「絶対ルール」に2項目追加: 「調べます」等の宣言より先にツールを実行すること・複雑なタスク（3ステップ以上）は最初に `.torii-todo.md` にステップリストを write_file で書き出すこと
+  - システムプロンプトの「絶対ルール」に2項目追加: 「調べます」等の宣言より先にツールを実行すること・複雑なタスクは最初に手順を整理してから実行すること
   - `buildClineTools` 末尾でツール結果に `[REMINDER: 元のタスクに集中し、完了までツールを使い続けよ。attempt_completion を呼ぶまで停止するな。]` を付加するラッパーを追加
 - **write_file / replace_in_file 承認時の diff 表示（`src/backend/tools.ts`）**:
   - `showDiffAndWaitApproval` 関数を追加。承認前に旧内容・新内容を OS tmpdir に一時ファイルとして書き出し、`vscode.commands.executeCommand('vscode.diff', ...)` でdiffビューを表示
