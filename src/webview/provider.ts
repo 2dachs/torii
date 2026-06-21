@@ -462,7 +462,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     // Webview から送られてきたメッセージをバックエンドの Express サーバーに転送
     const workspaceId = this._getWorkspaceId();
 
-    const payload: any = { message: text, workspaceId };
+    const payload: any = { message: text, workspaceId, stream: true };
     if (taskId) payload.taskId = taskId;
     if (images && images.length > 0) payload.images = images;
 
@@ -481,23 +481,66 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     };
 
     this._chatReq = http.request(options, (res: any) => {
-      let body = '';
-      res.on('data', (chunk: string) => (body += chunk));
-      res.on('end', () => {
-        this._chatReq = null;
-        if (this._view) {
-          try {
-            this._view.webview.postMessage({
-              command: 'receiveMessage',
-              data: JSON.parse(body),
-            });
-          } catch {
-            // キャンセル時など body が空の場合は無視
+      const contentType = String(res.headers['content-type'] || '');
+      if (contentType.includes('text/event-stream')) {
+        let buffer = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => {
+          buffer += chunk;
+          let separatorIndex = buffer.indexOf('\n\n');
+          while (separatorIndex !== -1) {
+            const packet = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+            separatorIndex = buffer.indexOf('\n\n');
+
+            const dataLine = packet
+              .split('\n')
+              .map(line => line.trim())
+              .find(line => line.startsWith('data: '));
+            if (!dataLine) continue;
+            const payload = dataLine.slice(6).trim();
+            if (!payload) continue;
+            try {
+              const event = JSON.parse(payload);
+              if (event.type === 'delta' && event.text) {
+                this._view?.webview.postMessage({ command: 'chatDelta', text: event.text });
+              } else if (event.type === 'done' && event.data) {
+                this._view?.webview.postMessage({ command: 'receiveMessage', data: event.data });
+              } else if (event.type === 'error' && event.data) {
+                const err = event.data as any;
+                this._view?.webview.postMessage({
+                  command: 'error',
+                  message: err.reply || err.message || '不明なエラー',
+                });
+              }
+            } catch {
+              // JSON 解析失敗は無視
+            }
           }
-        }
-        // 予算表示を更新
-        updateBudgetDisplay(this._context);
-      });
+        });
+        res.on('end', () => {
+          this._chatReq = null;
+          updateBudgetDisplay(this._context);
+        });
+      } else {
+        let body = '';
+        res.on('data', (chunk: string) => (body += chunk));
+        res.on('end', () => {
+          this._chatReq = null;
+          if (this._view) {
+            try {
+              this._view.webview.postMessage({
+                command: 'receiveMessage',
+                data: JSON.parse(body),
+              });
+            } catch {
+              // キャンセル時など body が空の場合は無視
+            }
+          }
+          // 予算表示を更新
+          updateBudgetDisplay(this._context);
+        });
+      }
     });
     this._chatReq.on('error', (e: Error) => {
       this._chatReq = null;

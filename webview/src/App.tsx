@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
 import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS } from '../../src/constants';
 
@@ -88,6 +89,241 @@ function formatDiffLines(lines: string[], startLine: number, prefix: string): st
   return lines
     .map((line, idx) => `${prefix}${String(startLine + idx).padStart(4, ' ')} | ${line}`)
     .join('\n');
+}
+
+type MarkdownBlock =
+  | { type: 'heading'; level: 1 | 2 | 3; text: string }
+  | { type: 'paragraph'; text: string }
+  | { type: 'list'; ordered: boolean; items: string[] }
+  | { type: 'quote'; text: string }
+  | { type: 'code'; lang: string; code: string };
+
+function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let index = 0;
+  let key = 0;
+
+  const pushText = (value: string) => {
+    if (value) nodes.push(value);
+  };
+
+  while (index < text.length) {
+    const rest = text.slice(index);
+    const match = rest.match(
+      /^(https?:\/\/[^\s<]+|`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/
+    );
+    if (!match) {
+      const next = rest.search(/https?:\/\/|`|\*\*|__|\*|_|\[/);
+      const chunk = next === -1 ? rest : rest.slice(0, next);
+      pushText(chunk);
+      index += chunk.length;
+      continue;
+    }
+
+    const token = match[1];
+    index += token.length;
+
+    if (token.startsWith('http://') || token.startsWith('https://')) {
+      nodes.push(
+        <a key={`${keyPrefix}-link-${key++}`} href={token} target="_blank" rel="noreferrer">
+          {token}
+        </a>
+      );
+      continue;
+    }
+
+    if (token.startsWith('`') && token.endsWith('`')) {
+      nodes.push(<code key={`${keyPrefix}-code-${key++}`}>{token.slice(1, -1)}</code>);
+      continue;
+    }
+
+    if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) {
+      nodes.push(
+        <strong key={`${keyPrefix}-strong-${key++}`}>
+          {token.slice(2, -2)}
+        </strong>
+      );
+      continue;
+    }
+
+    if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) {
+      nodes.push(
+        <em key={`${keyPrefix}-em-${key++}`}>
+          {token.slice(1, -1)}
+        </em>
+      );
+      continue;
+    }
+
+    const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      nodes.push(
+        <a key={`${keyPrefix}-href-${key++}`} href={linkMatch[2]} target="_blank" rel="noreferrer">
+          {linkMatch[1]}
+        </a>
+      );
+      continue;
+    }
+
+    pushText(token);
+  }
+
+  return nodes;
+}
+
+function parseMarkdownBlocks(content: string): MarkdownBlock[] {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const blocks: MarkdownBlock[] = [];
+  let i = 0;
+
+  const flushParagraph = (buffer: string[]) => {
+    if (buffer.length > 0) {
+      blocks.push({ type: 'paragraph', text: buffer.join(' ') });
+      buffer.length = 0;
+    }
+  };
+
+  const paragraphBuffer: string[] = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph(paragraphBuffer);
+      i += 1;
+      continue;
+    }
+
+    const fence = trimmed.match(/^```([\w+-]*)\s*$/);
+    if (fence) {
+      flushParagraph(paragraphBuffer);
+      const lang = fence[1] || '';
+      i += 1;
+      const codeLines: string[] = [];
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length && lines[i].trim().startsWith('```')) i += 1;
+      blocks.push({ type: 'code', lang, code: codeLines.join('\n') });
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.*)$/);
+    if (heading) {
+      flushParagraph(paragraphBuffer);
+      blocks.push({ type: 'heading', level: heading[1].length as 1 | 2 | 3, text: heading[2] });
+      i += 1;
+      continue;
+    }
+
+    const quote = trimmed.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushParagraph(paragraphBuffer);
+      const quoteLines = [quote[1]];
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i].trim();
+        if (!next.startsWith('>')) break;
+        quoteLines.push(next.replace(/^>\s?/, ''));
+        i += 1;
+      }
+      blocks.push({ type: 'quote', text: quoteLines.join('\n') });
+      continue;
+    }
+
+    const listItem = trimmed.match(/^([-*+])\s+(.*)$/) || trimmed.match(/^\d+\.\s+(.*)$/);
+    if (listItem) {
+      flushParagraph(paragraphBuffer);
+      const ordered = /^\d+\./.test(trimmed);
+      const items: string[] = [ordered ? (trimmed.match(/^\d+\.\s+(.*)$/)?.[1] || '') : (listItem[2] || '')];
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i].trim();
+        if (ordered) {
+          const m = next.match(/^\d+\.\s+(.*)$/);
+          if (!m) break;
+          items.push(m[1]);
+        } else {
+          const m = next.match(/^[-*+]\s+(.*)$/);
+          if (!m) break;
+          items.push(m[1]);
+        }
+        i += 1;
+      }
+      blocks.push({ type: 'list', ordered, items });
+      continue;
+    }
+
+    paragraphBuffer.push(trimmed);
+    i += 1;
+  }
+
+  flushParagraph(paragraphBuffer);
+  return blocks;
+}
+
+function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
+
+  return (
+    <div className={`markdown-content ${className}`.trim()}>
+      {blocks.map((block, index) => {
+        if (block.type === 'heading') {
+          const Tag = `h${block.level}` as const;
+          return (
+            <Tag key={`${block.type}-${index}`} className={`md-heading level-${block.level}`}>
+              {renderInlineMarkdown(block.text, `${block.type}-${index}`)}
+            </Tag>
+          );
+        }
+        if (block.type === 'paragraph') {
+          return (
+            <p key={`${block.type}-${index}`} className="md-paragraph">
+              {renderInlineMarkdown(block.text, `${block.type}-${index}`)}
+            </p>
+          );
+        }
+        if (block.type === 'quote') {
+          return (
+            <blockquote key={`${block.type}-${index}`} className="md-blockquote">
+              {block.text.split('\n').map((line, lineIndex) => (
+                <p key={lineIndex}>{renderInlineMarkdown(line, `${block.type}-${index}-${lineIndex}`)}</p>
+              ))}
+            </blockquote>
+          );
+        }
+        if (block.type === 'list') {
+          const ListTag = block.ordered ? 'ol' : 'ul';
+          return (
+            <ListTag key={`${block.type}-${index}`} className="md-list">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{renderInlineMarkdown(item, `${block.type}-${index}-${itemIndex}`)}</li>
+              ))}
+            </ListTag>
+          );
+        }
+        return (
+          <div key={`${block.type}-${index}`} className="md-code-block">
+            <div className="md-code-header">
+              <span>{block.lang || 'text'}</span>
+              <button
+                className="md-code-copy-btn"
+                onClick={() => navigator.clipboard.writeText(block.code)}
+                title="コードをコピー"
+              >
+                コピー
+              </button>
+            </div>
+            <pre className="md-code-pre">
+              <code>{block.code || ' '}</code>
+            </pre>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function getGitLabel(command: string): string | null {
@@ -282,6 +518,7 @@ function App() {
         case 'receiveMessage': {
           const res = msg.data as ApiResponse | undefined;
           if (res) {
+            setStreamingText('');
             const newMsg: ChatMessage = {
               id: Date.now().toString(),
               workspace_id: '',
@@ -348,6 +585,7 @@ function App() {
           break;
         }
         case 'error':
+          setStreamingText('');
           setMessages((prev) => [
             ...prev,
             {
@@ -372,6 +610,11 @@ function App() {
           setAgentPhase(null);
           setCurrentToolName(null);
           setAgentSteps((prev) => prev.filter(e => e.type === 'file_change_applied' || e.type === 'file_change_undone'));
+          break;
+        case 'chatDelta':
+          if ((msg as any).text) {
+            setStreamingText((prev) => prev + (msg as any).text);
+          }
           break;
         case 'secretSaved':
           if (msg.key) {
@@ -1330,7 +1573,7 @@ function App() {
                 ))}
               </div>
             )}
-            <div className="message-content">{msg.content}</div>
+            <MarkdownContent content={msg.content} className="message-markdown" />
             {(msg.role === 'user' || msg.role === 'assistant') && (
               <button
                 className={`copy-btn${copiedIds.has(msg.id) ? ' copied' : ''}`}
@@ -1519,7 +1762,7 @@ function App() {
             })}
             {streamingText && (
               <div className="agent-streaming-text">
-                <div className="message-content">{streamingText}</div>
+                <MarkdownContent content={streamingText} className="message-markdown" />
               </div>
             )}
             {!streamingText && !agentPhase && (
@@ -1544,6 +1787,11 @@ function App() {
                 </span>
               )}
             </div>
+            {streamingText && (
+              <div className="chat-streaming-preview">
+                <MarkdownContent content={streamingText} className="message-markdown" />
+              </div>
+            )}
           </div>
         )}
       </div>

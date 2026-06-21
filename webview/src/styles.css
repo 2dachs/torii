@@ -810,6 +810,114 @@ body,
 .message-content {
   margin-bottom: 4px;
 }
+.markdown-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-primary);
+}
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+.md-paragraph {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+}
+.md-heading {
+  margin: 0;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.md-heading.level-1 {
+  font-size: 18px;
+}
+.md-heading.level-2 {
+  font-size: 16px;
+}
+.md-heading.level-3 {
+  font-size: 14px;
+}
+.md-blockquote {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(137, 180, 250, 0.08);
+  color: var(--text-secondary);
+  border-radius: 0 6px 6px 0;
+}
+.md-blockquote p {
+  margin: 0;
+}
+.md-list {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.md-list li {
+  line-height: 1.55;
+}
+.md-code-block {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+.md-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.md-code-copy-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 10px;
+  cursor: pointer;
+}
+.md-code-copy-btn:hover {
+  background: var(--border);
+}
+.md-code-pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+  word-break: normal;
+  color: var(--text-primary);
+}
+.markdown-content code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(137, 180, 250, 0.14);
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.95em;
+}
+.markdown-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .message-meta {
   display: flex;
   gap: 8px;
@@ -836,6 +944,15 @@ body,
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.chat-streaming-preview {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-width: 100%;
 }
 
 /* ── Processing Badge ── */

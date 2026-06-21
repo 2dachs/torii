@@ -225,6 +225,29 @@ function buildContentParts(
   return parts;
 }
 
+function toRequestMessages(
+  messages: { role: string; content: string | ChatContentPart[] }[],
+  isMultimodal: boolean,
+): { role: string; content: string | ChatContentPart[] }[] {
+  return messages.map((m) => ({
+    role: m.role,
+    content: isMultimodal
+      ? m.content
+      : (typeof m.content === 'string'
+          ? m.content
+          : (m.content as ChatContentPart[]).filter((p) => p.type === 'text').map((p) => p.text || '').join('\n')),
+  }));
+}
+
+function estimateTokensFromText(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function estimatePromptTokens(messages: { role: string; content: string | ChatContentPart[] }[]): number {
+  const text = messages.map((m) => typeof m.content === 'string' ? m.content : (m.content as ChatContentPart[]).map((p) => p.text || '').join('\n')).join('\n');
+  return estimateTokensFromText(text);
+}
+
 /**
  * OpenAI/DeepSeek 互換 API (Chat Completions) へのリクエスト
  * 画像（image_url）対応
@@ -267,6 +290,100 @@ async function callOpenAICompatible(
   const promptTokens: number = data.usage?.prompt_tokens || 0;
   const completionTokens: number = data.usage?.completion_tokens || 0;
   const tokensUsed: number = data.usage?.total_tokens || promptTokens + completionTokens;
+
+  return { reply, tokensUsed, promptTokens, completionTokens };
+}
+
+async function callOpenAICompatibleStream(
+  endpoint: string,
+  chatPath: string,
+  apiKey: string,
+  authPrefix: string,
+  model: string,
+  maxTokens: number,
+  messages: { role: string; content: string | ChatContentPart[] }[],
+  isMultimodal: boolean,
+  onDelta: (delta: string) => void,
+) {
+  const requestMessages = toRequestMessages(messages, isMultimodal);
+
+  const response = await fetch(`${endpoint}${chatPath}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: authPrefix ? `${authPrefix} ${apiKey}` : undefined,
+    } as Record<string, string>,
+    body: JSON.stringify({
+      model,
+      messages: requestMessages,
+      max_tokens: maxTokens,
+      stream: true,
+      stream_options: { include_usage: true },
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`API エラー (${response.status}): ${errBody}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return callOpenAICompatible(endpoint, chatPath, apiKey, authPrefix, model, maxTokens, messages, isMultimodal);
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let reply = '';
+  let usage: any = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex = buffer.indexOf('\n\n');
+    while (separatorIndex !== -1) {
+      const chunk = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      separatorIndex = buffer.indexOf('\n\n');
+
+      const dataLine = chunk
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.startsWith('data: '));
+      if (!dataLine) continue;
+      const data = dataLine.slice(6).trim();
+      if (!data || data === '[DONE]') continue;
+      const parsed = JSON.parse(data);
+      if (parsed.usage) usage = parsed.usage;
+      const delta = parsed.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        reply += delta;
+        onDelta(delta);
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const lines = buffer.split('\n').map((line) => line.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data || data === '[DONE]') continue;
+      const parsed = JSON.parse(data);
+      if (parsed.usage) usage = parsed.usage;
+      const delta = parsed.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        reply += delta;
+        onDelta(delta);
+      }
+    }
+  }
+
+  const promptTokens = usage?.prompt_tokens ?? estimatePromptTokens(requestMessages);
+  const completionTokens = usage?.completion_tokens ?? estimateTokensFromText(reply);
+  const tokensUsed = usage?.total_tokens ?? (promptTokens + completionTokens);
 
   return { reply, tokensUsed, promptTokens, completionTokens };
 }
@@ -500,6 +617,73 @@ async function callOllama(
   return { reply, tokensUsed, promptTokens, completionTokens };
 }
 
+async function callOllamaStream(
+  endpoint: string,
+  chatPath: string,
+  model: string,
+  messages: { role: string; content: string }[],
+  onDelta: (delta: string) => void,
+) {
+  const ollamaMessages = messages.map((m) => ({
+    role: m.role,
+    content: typeof m.content === 'string' ? m.content : '',
+  }));
+
+  const response = await fetch(`${endpoint}${chatPath}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: ollamaMessages,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Ollama API エラー (${response.status}): ${errBody}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return callOllama(endpoint, chatPath, model, messages);
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let reply = '';
+  let promptTokens = 0;
+  let completionTokens = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let lineEnd = buffer.indexOf('\n');
+    while (lineEnd !== -1) {
+      const line = buffer.slice(0, lineEnd).trim();
+      buffer = buffer.slice(lineEnd + 1);
+      lineEnd = buffer.indexOf('\n');
+      if (!line) continue;
+      const parsed = JSON.parse(line);
+      if (typeof parsed.message?.content === 'string' && parsed.message.content) {
+        reply += parsed.message.content;
+        onDelta(parsed.message.content);
+      }
+      if (typeof parsed.prompt_eval_count === 'number') promptTokens = parsed.prompt_eval_count;
+      if (typeof parsed.eval_count === 'number') completionTokens = parsed.eval_count;
+      if (parsed.done) {
+        if (!promptTokens && typeof parsed.prompt_eval_count === 'number') promptTokens = parsed.prompt_eval_count;
+        if (!completionTokens && typeof parsed.eval_count === 'number') completionTokens = parsed.eval_count;
+      }
+    }
+  }
+
+  const tokensUsed = promptTokens + completionTokens || estimatePromptTokens(ollamaMessages as any) + estimateTokensFromText(reply);
+  return { reply, tokensUsed, promptTokens, completionTokens };
+}
+
 /**
  * コスト計算（プロバイダー・モデル別）
  */
@@ -645,6 +829,35 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
 
   // POST /api/chat - AIにメッセージを送信
   app.post('/api/chat', async (req, res) => {
+    const wantsStream = !!req.body.stream;
+    const sendChatResponse = (payload: Record<string, unknown>, status = 200) => {
+      if (wantsStream) {
+        if (status >= 400) {
+          res.write(`data: ${JSON.stringify({ type: 'error', data: payload })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify({ type: 'done', data: payload })}\n\n`);
+        }
+        res.end();
+        return;
+      }
+      if (status >= 400) {
+        res.status(status).json(payload);
+      } else {
+        res.json(payload);
+      }
+    };
+    const sendChatDelta = (text: string) => {
+      if (!wantsStream || !text) return;
+      res.write(`data: ${JSON.stringify({ type: 'delta', text })}\n\n`);
+    };
+
+    if (wantsStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+    }
+
     try {
       const { message, workspaceId, images } = req.body;
       if (!message || !workspaceId) {
@@ -665,7 +878,7 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
       const guardResult = isCommandSafe(message);
       if (!guardResult.safe) {
         await saveChatMessage(workspaceId, taskId || null, 'system', guardResult.reason || 'Command blocked', 0, 0);
-        res.json({ reply: `⚠️ この操作はブロックされました: ${guardResult.reason}`, blocked: true });
+        sendChatResponse({ reply: `⚠️ この操作はブロックされました: ${guardResult.reason}`, blocked: true });
         return;
       }
 
@@ -686,7 +899,7 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
 
       const { currentCost, budgetPercent } = await getBudgetState(workspaceId, budgetScope, monthlyBudget);
       if (monthlyBudget > 0 && currentCost >= monthlyBudget) {
-        res.json({
+        sendChatResponse({
           reply: `⚠️ 今月のAPI利用予算上限 ($${monthlyBudget.toFixed(2)}) に達しました。\n現在の使用額: $${currentCost.toFixed(2)}\n来月までお待ちいただくか、設定で予算上限を引き上げてください。`,
           budgetExceeded: true,
           totalCostThisMonth: currentCost,
@@ -853,7 +1066,29 @@ ${chatTree}${chatEditorSection}
       let completionTokens: number;
 
       try {
-        if (routeResult.providerId === 'ollama') {
+        if (wantsStream && (routeResult.providerId === 'ollama' || routeResult.providerId === 'openai' || routeResult.providerId === 'deepseek' || routeResult.providerId === 'openrouter')) {
+          if (routeResult.providerId === 'ollama') {
+            ({ reply, tokensUsed, promptTokens, completionTokens } = await callOllamaStream(
+              effectiveEndpointChat,
+              effectiveProvider.chatPath,
+              effectiveModel,
+              messages as { role: string; content: string }[],
+              sendChatDelta,
+            ));
+          } else {
+            ({ reply, tokensUsed, promptTokens, completionTokens } = await callOpenAICompatibleStream(
+              effectiveEndpointChat,
+              effectiveProvider.chatPath,
+              apiKey,
+              effectiveProvider.authPrefix,
+              effectiveModel,
+              maxTokens,
+              messages,
+              isMultimodal,
+              sendChatDelta,
+            ));
+          }
+        } else if (routeResult.providerId === 'ollama') {
           ({ reply, tokensUsed, promptTokens, completionTokens } = await callOllama(
             effectiveEndpointChat,
             effectiveProvider.chatPath,
@@ -897,7 +1132,7 @@ ${chatTree}${chatEditorSection}
         console.error(`[Torii] API error (${effectiveProvider.name}):`, errorMessage.slice(0, 500));
 
         if (errorMessage.includes('401') || errorMessage.includes('403')) {
-          res.json({
+          sendChatResponse({
             reply: `❌ ${effectiveProvider.name} APIキーが無効です。\n\n設定画面（⚙️）で正しいAPIキーを登録してください。\n\nエラー詳細: ${errorMessage}`,
             invalidApiKey: true,
             provider: routeResult.providerId,
@@ -910,7 +1145,7 @@ ${chatTree}${chatEditorSection}
 
         // Ollama接続失敗時のフォールバック提案
         if (routeResult.providerId === 'ollama') {
-          res.json({
+          sendChatResponse({
             reply: `❌ Ollama に接続できませんでした。\n\nOllamaが起動しているか確認してください。\n\n\`ollama serve\` で起動後、\`ollama pull ${effectiveModel}\` でモデルをダウンロードしてください。\n\nエラー詳細: ${errorMessage}`,
             error: true,
             provider: routeResult.providerId,
@@ -921,14 +1156,14 @@ ${chatTree}${chatEditorSection}
           return;
         }
 
-        res.status(500).json({
+        sendChatResponse({
           reply: `❌ API リクエストエラー: ${errorMessage}`,
           error: true,
           provider: routeResult.providerId,
           model: effectiveModel,
           providerName: effectiveProvider.name,
           modelName: effectiveModelDef?.name || effectiveModel,
-        });
+        }, 500);
         return;
       }
 
@@ -959,7 +1194,7 @@ ${chatTree}${chatEditorSection}
       const { currentCost: totalCostThisMonth } = await getBudgetState(workspaceId, budgetScope, monthlyBudget);
       const totalCostThisMonthJpy = totalCostThisMonth * exchangeRate;
 
-      res.json({
+      sendChatResponse({
         reply,
         tokensUsed,
         costUsd,
@@ -984,7 +1219,7 @@ ${chatTree}${chatEditorSection}
       });
     } catch (err: any) {
       console.error('[Torii] Chat error:', err instanceof Error ? err.message : String(err));
-      res.status(500).json({ reply: `エラーが発生しました: ${err.message}`, error: true });
+      sendChatResponse({ reply: `エラーが発生しました: ${err.message}`, error: true }, 500);
     }
   });
 

@@ -84,6 +84,7 @@
 - 画像添付対応（マルチモーダルモデル + Gemini自動橋渡し）
 - エディタ内容の添付（現在ファイルをコンテキストに追加）
 - IME対応（日本語入力中のEnter誤送信防止）
+- Markdownレンダリング: メッセージ本文を見出し・箇条書き・引用・コードブロック付きで表示
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - **ストリーミング応答**: SSEによるリアルタイム表示
 - **承認フロー**: コマンド実行・ファイル書き込み時のワンクリック承認UI
