@@ -167,6 +167,10 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **0.5.0 起動ハング修正**:
+  - **`src/backend/server.ts`**: 起動時に OpenRouter 価格API取得を `await` していた処理をバックグラウンド実行に変更。ネットワーク待ちで VS Code 拡張ホストが応答不能になるリスクを解消
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.1` へ更新
+
 - **予算バー表示の数値化**:
   - **`webview/src/budget.js` / `webview/src/budget.d.ts`**: 予算表示の組み立てを純関数化し、コスト・上限・percent・tooltip を数値スナップショットで管理するよう変更
   - **`webview/src/App.tsx`**: `receiveMessage` と `agentEvent.done` の予算更新を共通ヘルパーに統合。Agent完了時は単発コストではなく累計コストを表示するよう修正
