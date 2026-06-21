@@ -186,9 +186,9 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
 
     const csp = [
       `default-src 'none';`,
-      `style-src ${webview.cspSource} 'unsafe-inline';`,
-      `script-src ${webview.cspSource};`,
-      `connect-src http://localhost:${this._port} http://127.0.0.1:${this._port} ${providerEndpointsStr} https:;`,
+      `style-src ${webview.cspSource} http://localhost:* http://127.0.0.1:* 'unsafe-inline';`,
+      `script-src ${webview.cspSource} http://localhost:* http://127.0.0.1:*;`,
+      `connect-src http://localhost:* http://127.0.0.1:* ${providerEndpointsStr} https:;`,
       `img-src ${webview.cspSource} https: data:;`,
       `font-src ${webview.cspSource};`,
       `media-src ${webview.cspSource} data:;`,

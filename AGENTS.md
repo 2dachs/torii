@@ -167,6 +167,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **0.5.3 Webview CSP修正**:
+  - **`src/webview/provider.ts`**: VS Code Webviewの内部アセット配信が `http://localhost:*` / `http://127.0.0.1:*` になる環境に備え、`script-src` / `style-src` / `connect-src` を許可。CSPでWebview JSがブロックされクリック処理が動かないリスクを修正
+  - **`webview/src/main.tsx`**: DevTools ConsoleでTorii Webviewの起動を確認できるよう `[Torii Webview] boot` ログを追加
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.4` へ更新
+
 - **0.5.2 VS Code応答停止修正**:
   - **`package.json`**: esbuild の `compile` / `watch` に `--line-limit=120` を追加。バンドル済み `dist/ext/extension.js` の最大行長が数十万文字になり、VS Codeエディタ/Rendererが応答停止するリスクを解消
   - **`package.json` / `package-lock.json`**: 修正版として `0.5.3` へ更新

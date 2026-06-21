@@ -28,6 +28,7 @@
 - OpenRouter 価格API取得を起動時に待たないようにして、0.5.0 の起動ハングリスクを修正済み
 - 巨大なアクティブファイルをWebviewへ丸ごと送らないようにし、クリック不能・ウィンドウ応答停止リスクを修正済み
 - esbuild出力の長行を制限し、`dist/ext/extension.js` を開いた場合のVS Code応答停止リスクを修正済み
+- VS Code Webviewのlocalhostアセット配信がCSPでブロックされる場合に備え、script/style/connectのlocalhost許可とTorii Webview起動ログを追加済み
 
 ### 未実装
 
