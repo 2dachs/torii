@@ -171,6 +171,25 @@ async function checkModelLimit(
   return { shouldFallback: false, reason: '' };
 }
 
+async function getBudgetState(
+  workspaceId: string,
+  budgetScope: string,
+  monthlyBudget: number,
+): Promise<{ currentCost: number; budgetPercent: number }> {
+  if (monthlyBudget <= 0) {
+    return { currentCost: 0, budgetPercent: 0 };
+  }
+
+  const currentCost = budgetScope === 'project'
+    ? (await getMonthlyBudget(workspaceId))?.total_cost_usd || 0
+    : (await getGlobalMonthlyBudget()).total_cost_usd;
+
+  return {
+    currentCost,
+    budgetPercent: currentCost / monthlyBudget,
+  };
+}
+
 // ── チャットメッセージ型（image_url対応） ──
 interface ChatContentPart {
   type: 'text' | 'image_url';
@@ -665,25 +684,14 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
         .getConfiguration(CONFIG_SECTION)
         .get<string>(CONFIG_BUDGET_SCOPE, DEFAULT_BUDGET_SCOPE);
 
-      let budgetPercent = 0;
-      let currentCost = 0;
-      if (monthlyBudget > 0) {
-        if (budgetScope === 'project') {
-          const budget = await getMonthlyBudget(workspaceId);
-          currentCost = budget?.total_cost_usd || 0;
-        } else {
-          const globalBudget = await getGlobalMonthlyBudget();
-          currentCost = globalBudget.total_cost_usd;
-        }
-        budgetPercent = currentCost / monthlyBudget;
-        if (currentCost >= monthlyBudget) {
-          res.json({
-            reply: `⚠️ 今月のAPI利用予算上限 ($${monthlyBudget.toFixed(2)}) に達しました。\n現在の使用額: $${currentCost.toFixed(2)}\n来月までお待ちいただくか、設定で予算上限を引き上げてください。`,
-            budgetExceeded: true,
-            totalCostThisMonth: currentCost,
-          });
-          return;
-        }
+      const { currentCost, budgetPercent } = await getBudgetState(workspaceId, budgetScope, monthlyBudget);
+      if (monthlyBudget > 0 && currentCost >= monthlyBudget) {
+        res.json({
+          reply: `⚠️ 今月のAPI利用予算上限 ($${monthlyBudget.toFixed(2)}) に達しました。\n現在の使用額: $${currentCost.toFixed(2)}\n来月までお待ちいただくか、設定で予算上限を引き上げてください。`,
+          budgetExceeded: true,
+          totalCostThisMonth: currentCost,
+        });
+        return;
       }
 
       // ── メイン/サブモデル判定 ──
@@ -948,15 +956,7 @@ ${chatTree}${chatEditorSection}
         effectiveModelDef?.name || effectiveModel,
       );
 
-      // 月間予算を取得（スコープ設定に応じて切替）
-      let totalCostThisMonth: number;
-      if (budgetScope === 'project') {
-        const budget = await getMonthlyBudget(workspaceId);
-        totalCostThisMonth = budget?.total_cost_usd || 0;
-      } else {
-        const globalBudget = await getGlobalMonthlyBudget();
-        totalCostThisMonth = globalBudget.total_cost_usd;
-      }
+      const { currentCost: totalCostThisMonth } = await getBudgetState(workspaceId, budgetScope, monthlyBudget);
       const totalCostThisMonthJpy = totalCostThisMonth * exchangeRate;
 
       res.json({
@@ -1089,14 +1089,49 @@ ${chatTree}${chatEditorSection}
 
     try {
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
-      const { provider, providerId, endpoint: defaultEndpoint, model, maxTokens, mainProviderId, mainModel } = getProviderConfig(context, workspaceRoot);
+      const {
+        provider,
+        providerId,
+        endpoint: defaultEndpoint,
+        model,
+        maxTokens,
+        monthlyBudget,
+        mainProviderId,
+        mainModel,
+        subProviderId,
+        subModel,
+        modelLimits,
+      } = getProviderConfig(context, workspaceRoot);
       const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
       const exchangeRate = await getUsdToJpyRate();
       const autoApplyFiles = config.get<boolean>(CONFIG_AUTO_APPLY_FILES, false);
+      const budgetScope = config.get<string>(CONFIG_BUDGET_SCOPE, DEFAULT_BUDGET_SCOPE);
+      const { currentCost, budgetPercent } = await getBudgetState(workspaceId, budgetScope, monthlyBudget);
+
+      if (monthlyBudget > 0 && currentCost >= monthlyBudget) {
+        sendEvent({
+          type: 'error',
+          message: `⚠️ 今月のAPI利用予算上限 ($${monthlyBudget.toFixed(2)}) に達しました。現在の使用額: $${currentCost.toFixed(2)}。`,
+        });
+        res.end();
+        return;
+      }
 
       // mainProvider/mainModel を優先してルーティングの起点とする（チャットモードと同様）
-      const effectiveStartProviderId = mainProviderId || providerId;
-      const effectiveStartModel = mainModel || model;
+      let effectiveStartProviderId = mainProviderId || providerId;
+      let effectiveStartModel = mainModel || model;
+      let usedSubModel = false;
+
+      const mainLimitCheck = await checkModelLimit(workspaceId, effectiveStartModel, modelLimits, subProviderId, subModel);
+      if (mainLimitCheck.shouldFallback) {
+        const subProviderDef = PROVIDERS[subProviderId];
+        const subModelDef = subProviderDef?.models.find((m) => m.id === subModel) || subProviderDef?.models[0];
+        if (subProviderDef && subModelDef) {
+          effectiveStartProviderId = subProviderId;
+          effectiveStartModel = subModelDef.id;
+          usedSubModel = true;
+        }
+      }
 
       // ── 自動ルーティング（チャットモードと同様） ──
       const autoRoutingEnabled = config.get<boolean>('autoRouting', true);
@@ -1105,11 +1140,26 @@ ${chatTree}${chatEditorSection}
         message,
         effectiveStartProviderId,
         effectiveStartModel,
-        0, // agentモードでは予算チェックを無効（別途上限管理）
+        budgetPercent,
         false,
         autoRoutingEnabled,
         customRules,
       );
+
+      if (!usedSubModel) {
+        const routedLimitCheck = await checkModelLimit(workspaceId, routeResult.modelId, modelLimits, subProviderId, subModel);
+        if (routedLimitCheck.shouldFallback) {
+          const subProviderDef = PROVIDERS[subProviderId];
+          const subModelDef = subProviderDef?.models.find((m) => m.id === subModel) || subProviderDef?.models[0];
+          if (subProviderDef && subModelDef) {
+            (routeResult as any).providerId = subProviderId;
+            (routeResult as any).modelId = subModelDef.id;
+            (routeResult as any).providerName = subProviderDef.name;
+            (routeResult as any).modelName = subModelDef.name;
+            usedSubModel = true;
+          }
+        }
+      }
 
       const effectiveProviderId = routeResult.providerId;
       const effectiveModel = routeResult.modelId;
@@ -1402,11 +1452,13 @@ ${chatTree}${chatEditorSection}
   app.get('/api/budget', async (_req, res) => {
     try {
       const { monthlyBudget } = getProviderConfig(context);
+      const budgetScope = vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<string>(CONFIG_BUDGET_SCOPE, DEFAULT_BUDGET_SCOPE);
       const exchangeRate = await getUsdToJpyRate();
 
       const workspaceId = getCurrentWorkspaceId();
-      const budget = await getMonthlyBudget(workspaceId);
-      const totalCostThisMonth = budget?.total_cost_usd || 0;
+      const { currentCost: totalCostThisMonth } = await getBudgetState(workspaceId, budgetScope || DEFAULT_BUDGET_SCOPE, monthlyBudget);
       const totalCostThisMonthJpy = totalCostThisMonth * exchangeRate;
 
       res.json({
