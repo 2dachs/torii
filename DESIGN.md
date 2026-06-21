@@ -87,6 +87,7 @@
 - Markdownレンダリング: メッセージ本文を見出し・箇条書き・引用・コードブロック付きで表示
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - **ストリーミング応答**: SSEによるリアルタイム表示
+- **初回オンボーディング**: 初回起動時にOllama開始 / 設定画面への導線を表示
 - **承認フロー**: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - **Webviewファイル保存**: 保存前に差分確認モーダルを表示し、ユーザーが適用を選んだ場合のみ書き込む
 - **ライセンス認証**: LemonSqueezy連携（activate/validate）・trial/valid/grace/expired分岐・24hキャッシュ・7日間オフライン猶予

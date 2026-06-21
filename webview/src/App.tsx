@@ -4,6 +4,7 @@ import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, S
 import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS } from '../../src/constants';
 
 const vscode = acquireVsCodeApi?.();
+const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
 
 const TOOL_JAPANESE_NAMES: Record<string, string> = {
   read_file: 'ファイル読み込み中',
@@ -373,6 +374,7 @@ function App() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [serverPort, setServerPort] = useState<number | null>(null);
   const [budgetInfo, setBudgetInfo] = useState<string>('');
   const [budgetCostJpy, setBudgetCostJpy] = useState(0);
@@ -484,6 +486,36 @@ function App() {
     },
     [getProvider]
   );
+
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem(ONBOARDING_DISMISSED_KEY);
+      setShowOnboarding(dismissed !== '1');
+    } catch {
+      setShowOnboarding(false);
+    }
+  }, []);
+
+  const dismissOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    try {
+      localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
+    } catch {
+      // localStorage が使えない環境では表示を閉じるだけにする
+    }
+  }, []);
+
+  const handleStartWithOllama = useCallback(() => {
+    dismissOnboarding();
+    setShowSettings(true);
+    vscode?.postMessage({ command: MSG_SETUP_OLLAMA });
+  }, [dismissOnboarding]);
+
+  const handleOpenSettingsFromOnboarding = useCallback(() => {
+    dismissOnboarding();
+    setShowSettings(true);
+    vscode?.postMessage({ command: 'settingsConfig' });
+  }, [dismissOnboarding]);
 
   // ── Extension Host からのメッセージ受信 ──
   useEffect(() => {
@@ -2804,6 +2836,35 @@ function App() {
 
             <div className="settings-actions" style={{ marginTop: 12 }}>
               <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showOnboarding && (
+        <div className="onboarding-overlay" onClick={dismissOnboarding}>
+          <div className="onboarding-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="onboarding-hero">
+              <ToriiIcon size={28} />
+              <div>
+                <div className="onboarding-title">はじめに</div>
+                <div className="onboarding-subtitle">最初は無料のローカル環境から始めるのが無難です。</div>
+              </div>
+            </div>
+            <div className="onboarding-body">
+              <p>1. Ollama をセットアップすると、APIキーなしで試せます。</p>
+              <p>2. 既存のAPIキーを使うなら、設定画面から入力できます。</p>
+              <p>3. どちらでも、あとからモデルや予算は変えられます。</p>
+            </div>
+            <div className="onboarding-actions">
+              <button className="btn btn-primary" onClick={handleStartWithOllama}>
+                🚀 Ollama で開始
+              </button>
+              <button className="btn btn-secondary" onClick={handleOpenSettingsFromOnboarding}>
+                ⚙️ 設定を開く
+              </button>
+              <button className="btn btn-secondary" onClick={dismissOnboarding}>
+                あとで
+              </button>
             </div>
           </div>
         </div>
