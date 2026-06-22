@@ -1012,7 +1012,6 @@ function App() {
       vscode?.postMessage({ command: 'loadChatHistory', taskId: activeTaskId });
     }
     vscode?.postMessage({ command: 'settingsConfig' });
-    vscode?.postMessage({ command: 'editorContent' });
     vscode?.postMessage({ command: MSG_GET_LICENSE_STATUS });
 
     return () => window.removeEventListener('message', handler);

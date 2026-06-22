@@ -167,6 +167,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-21
+- **0.5.4 プロジェクトフォルダ起動時の安定化**:
+  - **`src/webview/provider.ts`**: Webview初期化時の全履歴送信とアクティブエディタ本文の自動送信を廃止。エディタ本文はユーザーが添付ボタンを押した時だけ取得するよう変更
+  - **`webview/src/App.tsx`**: 初期マウント時の `editorContent` 要求を削除。プロジェクトフォルダを開いた直後のWebview/Renderer負荷を削減
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.5` へ更新
+
 - **0.5.3 Webview CSP修正**:
   - **`src/webview/provider.ts`**: VS Code Webviewの内部アセット配信が `http://localhost:*` / `http://127.0.0.1:*` になる環境に備え、`script-src` / `style-src` / `connect-src` を許可。CSPでWebview JSがブロックされクリック処理が動かないリスクを修正
   - **`webview/src/main.tsx`**: DevTools ConsoleでTorii Webviewの起動を確認できるよう `[Torii Webview] boot` ログを追加

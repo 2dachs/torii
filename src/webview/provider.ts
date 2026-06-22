@@ -143,20 +143,6 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       await this._handleMessage(message);
     }));
 
-    // VS Code のアクティブエディタ変更を監視して webview に通知
-    disposables.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (editor && this._view) {
-        this._sendEditorContent(editor);
-      }
-    }));
-
-    // エディタの内容変更も監視（ドキュメント保存時）
-    disposables.push(vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (this._view && vscode.window.activeTextEditor?.document === doc) {
-        this._sendEditorContent(vscode.window.activeTextEditor);
-      }
-    }));
-
     // WebviewView 破棄時にリスナーを全解放（メモリリーク防止）
     webviewView.onDidDispose(() => {
       this._view = undefined;
@@ -339,16 +325,10 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     });
     // タスク一覧を送信
     await this._sendTasks();
-    // チャット履歴を送信
-    await this._sendChatHistory();
     // VS Code 設定を転送
     await this._sendSettingsConfig();
     // ライセンスステータスを送信
     await this._handleGetLicenseStatus();
-    // 現在のエディタ内容を送信
-    if (vscode.window.activeTextEditor) {
-      this._sendEditorContent(vscode.window.activeTextEditor);
-    }
   }
 
   /** アクティブエディタの内容を webview に転送 */
