@@ -196,6 +196,9 @@ export interface ServerConfig {
   escalateModel2?: string;
   /** 予算バー表示通貨 */
   displayCurrency?: string;
+  /** OpenRouter 用途別モデル */
+  openRouterPlanningModel?: string;
+  openRouterImplementationModel?: string;
   /** .pettal プロジェクト設定 */
   pettalConfig?: PettalProjectConfig | null;
   hasPettalFile?: boolean;
@@ -211,6 +214,7 @@ export interface FileContent {
 
 /** エージェントモード */
 export type AgentMode = 'chat' | 'agent';
+export type ModelIntent = 'auto' | 'planning' | 'implementation';
 
 /** ライセンスステータス */
 export type LicenseStatus = 'valid' | 'trial' | 'trial_expired' | 'free' | 'expired' | 'invalid' | 'grace';

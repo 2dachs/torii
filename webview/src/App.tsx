@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
+import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, ModelIntent, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
 import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
 import { buildBudgetMeterState } from './budget.js';
 
@@ -404,6 +404,8 @@ const DEFAULT_CONFIG: ServerConfig = {
   mainModel: '',
   subProvider: 'ollama',
   subModel: 'qwen2.5-coder',
+  openRouterPlanningModel: 'z-ai/glm-5.2',
+  openRouterImplementationModel: 'deepseek/deepseek-v4-flash',
   modelLimits: [],
   pettalConfig: null,
   hasPettalFile: false,
@@ -429,6 +431,7 @@ function App() {
 
   // ── エージェントモード ──
   const [agentMode, setAgentMode] = useState<AgentMode>('chat');
+  const [modelIntent, setModelIntent] = useState<ModelIntent>('auto');
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [streamingText, setStreamingText] = useState<string>('');
   const [agentSteps, setAgentSteps] = useState<AgentEvent[]>([]);
@@ -519,6 +522,7 @@ function App() {
     text: string;
     taskId: string | null;
     agentMode: AgentMode;
+    modelIntent: ModelIntent;
     images: Array<{ data: string; mimeType: string }>;
   } | null>(null);
   // ユーザーが意図的に「新しいチャット」モードに入ったときに true。
@@ -1094,6 +1098,7 @@ function App() {
       text: finalContent,
       taskId: activeTaskId,
       agentMode: effectiveMode,
+      modelIntent,
       images: imageAttachments.map(a => ({ data: a.data, mimeType: a.mimeType || 'image/png' })),
     };
 
@@ -1102,12 +1107,14 @@ function App() {
       text: finalContent,
       taskId: activeTaskId,
       agentMode: effectiveMode,
+      modelIntent,
       images: imageAttachments.map(a => ({ data: a.data, mimeType: a.mimeType || 'image/png' })),
     });
+    setModelIntent('auto');
 
     // 添付をクリア（テキスト添付は保持）
     setAttachments(prev => prev.filter(a => a.type === 'text'));
-  }, [input, loading, activeTaskId, attachments, editorInfo, showEditorContext, licenseStatus, agentMode]);
+  }, [input, loading, activeTaskId, attachments, editorInfo, showEditorContext, licenseStatus, agentMode, modelIntent]);
 
   // ── キー入力 ──
   const handleKeyDown = useCallback(
@@ -1288,6 +1295,7 @@ function App() {
       text: last.text,
       taskId: last.taskId,
       agentMode: last.agentMode,
+      modelIntent: last.modelIntent,
       images: last.images,
     });
   }, [loading, activeTaskId]);
@@ -2244,6 +2252,23 @@ function App() {
           >
             🤖 Agent
           </button>
+          {(['auto', 'planning', 'implementation'] as const).map((intent) => (
+            <button
+              key={intent}
+              className={`intent-toggle-btn ${modelIntent === intent ? 'active' : ''}`}
+              onClick={() => setModelIntent(intent)}
+              title={
+                intent === 'auto'
+                  ? '用途を自動判定'
+                  : intent === 'planning'
+                  ? '相談・レビュー・設計モデルを今回だけ使用'
+                  : '実装・修正モデルを今回だけ使用'
+              }
+              disabled={loading}
+            >
+              {intent === 'auto' ? 'Auto' : intent === 'planning' ? '相談' : '実装'}
+            </button>
+          ))}
           <div className="input-toolbar-actions">
             {canAttachImages && (
               <button
@@ -2648,6 +2673,40 @@ function App() {
                                   </div>
                                 );
                               })}
+                              <div className="openrouter-intent-models">
+                                <div className="settings-field">
+                                  <label>相談・レビュー・設計</label>
+                                  <input
+                                    type="text"
+                                    placeholder="z-ai/glm-5.2"
+                                    value={serverConfig.openRouterPlanningModel || ''}
+                                    onChange={(e) => setServerConfig(prev => ({ ...prev, openRouterPlanningModel: e.target.value }))}
+                                    onBlur={(e) => vscode?.postMessage({
+                                      command: MSG_UPDATE_MODEL_CONFIG,
+                                      config: { openRouterPlanningModel: e.target.value },
+                                    })}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    }}
+                                  />
+                                </div>
+                                <div className="settings-field">
+                                  <label>実装・修正</label>
+                                  <input
+                                    type="text"
+                                    placeholder="deepseek/deepseek-v4-flash"
+                                    value={serverConfig.openRouterImplementationModel || ''}
+                                    onChange={(e) => setServerConfig(prev => ({ ...prev, openRouterImplementationModel: e.target.value }))}
+                                    onBlur={(e) => vscode?.postMessage({
+                                      command: MSG_UPDATE_MODEL_CONFIG,
+                                      config: { openRouterImplementationModel: e.target.value },
+                                    })}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    }}
+                                  />
+                                </div>
+                              </div>
                             </div>
                           ) : (p.models || settings.models) && (p.models || settings.models).length > 0 ? (
                             <select

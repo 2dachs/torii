@@ -20,6 +20,10 @@ type OpenRouterApiModel = {
   };
 };
 
+type OpenRouterModelsResponse = {
+  data?: OpenRouterApiModel[];
+};
+
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5000;
@@ -55,8 +59,8 @@ export async function refreshOpenRouterPricingCache(force = false): Promise<void
         throw new Error(`OpenRouter API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const models = Array.isArray(data?.data) ? data.data as OpenRouterApiModel[] : [];
+      const data = await response.json() as OpenRouterModelsResponse;
+      const models = Array.isArray(data.data) ? data.data : [];
       const next = new Map<string, OpenRouterModelPricing>();
 
       for (const model of models) {

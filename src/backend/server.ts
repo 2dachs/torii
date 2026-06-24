@@ -44,6 +44,11 @@ import {
   CONFIG_SUB_PROVIDER,
   CONFIG_SUB_MODEL,
   CONFIG_MODEL_LIMITS,
+  CONFIG_OPENROUTER_PLANNING_MODEL,
+  CONFIG_OPENROUTER_IMPLEMENTATION_MODEL,
+  DEFAULT_OPENROUTER_PLANNING_MODEL,
+  DEFAULT_OPENROUTER_IMPLEMENTATION_MODEL,
+  type ModelIntent,
 } from '../constants';
 
 let server: ReturnType<typeof createServer> | undefined;
@@ -133,11 +138,13 @@ function getProviderConfig(context: vscode.ExtensionContext, workspaceRoot?: str
   const mainModel = projectConfig?.mainModel || config.get<string>(CONFIG_MAIN_MODEL, '') || mainProviderFallbackModel;
   const subProviderId = (projectConfig?.subProvider || config.get<ProviderId>(CONFIG_SUB_PROVIDER, 'ollama')) as ProviderId;
   const subModel = projectConfig?.subModel || config.get<string>(CONFIG_SUB_MODEL, PROVIDERS.ollama.defaultModel);
+  const openRouterPlanningModel = config.get<string>(CONFIG_OPENROUTER_PLANNING_MODEL, DEFAULT_OPENROUTER_PLANNING_MODEL);
+  const openRouterImplementationModel = config.get<string>(CONFIG_OPENROUTER_IMPLEMENTATION_MODEL, DEFAULT_OPENROUTER_IMPLEMENTATION_MODEL);
 
   // モデル別使用上限
   const modelLimits: ModelLimit[] = projectConfig?.modelLimits || config.get<ModelLimit[]>(CONFIG_MODEL_LIMITS, []);
 
-  return { provider, providerId, endpoint, model, maxTokens, monthlyBudget, mainProviderId, mainModel, subProviderId, subModel, modelLimits, projectConfig };
+  return { provider, providerId, endpoint, model, maxTokens, monthlyBudget, mainProviderId, mainModel, subProviderId, subModel, modelLimits, projectConfig, openRouterPlanningModel, openRouterImplementationModel };
 }
 
 /**
@@ -906,7 +913,7 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
     }
 
     try {
-      const { message, workspaceId, images } = req.body;
+      const { message, workspaceId, images, modelIntent } = req.body as { message: string; workspaceId: string; images?: any[]; modelIntent?: ModelIntent };
       if (!message || !workspaceId) {
         res.status(400).json({ reply: '⚠️ message と workspaceId は必須です。', error: true });
         return;
@@ -931,7 +938,7 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
 
       // プロバイダー設定を取得（毎回最新、.pettal優先）
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
-      const { providerId, model, maxTokens, monthlyBudget, mainProviderId, mainModel, subProviderId, subModel, modelLimits } = getProviderConfig(context, workspaceRoot);
+      const { providerId, model, maxTokens, monthlyBudget, mainProviderId, mainModel, subProviderId, subModel, modelLimits, openRouterPlanningModel, openRouterImplementationModel } = getProviderConfig(context, workspaceRoot);
 
       // 添付画像の処理
       let attachedImages: { data: string; mimeType: string }[] = (images || []).map((img: any) => ({
@@ -983,6 +990,12 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
         attachedImages.length > 0,
         autoRoutingEnabled,
         customRules,
+        {
+          modelIntent: modelIntent || 'auto',
+          executionMode: 'chat',
+          openRouterPlanningModel,
+          openRouterImplementationModel,
+        },
       );
 
       // ルーティング後にも対象モデルの上限チェック
@@ -1314,7 +1327,7 @@ ${chatTree}${chatEditorSection}
 
   // POST /api/agent - エージェントループ（SSE ストリーミング）
   app.post('/api/agent', async (req, res) => {
-    const { message, workspaceId } = req.body;
+    const { message, workspaceId, modelIntent } = req.body as { message: string; workspaceId: string; modelIntent?: ModelIntent };
     if (!message || !workspaceId) {
       res.status(400).json({ error: 'message と workspaceId は必須です' });
       return;
@@ -1383,6 +1396,8 @@ ${chatTree}${chatEditorSection}
         subProviderId,
         subModel,
         modelLimits,
+        openRouterPlanningModel,
+        openRouterImplementationModel,
       } = getProviderConfig(context, workspaceRoot);
       const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
       const exchangeRate = await getUsdToJpyRate();
@@ -1426,6 +1441,12 @@ ${chatTree}${chatEditorSection}
         false,
         autoRoutingEnabled,
         customRules,
+        {
+          modelIntent: modelIntent || 'auto',
+          executionMode: 'agent',
+          openRouterPlanningModel,
+          openRouterImplementationModel,
+        },
       );
 
       if (!usedSubModel) {

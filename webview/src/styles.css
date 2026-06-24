@@ -2005,6 +2005,7 @@ body,
 .input-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 4px 0 2px;
   flex-shrink: 0;
@@ -2034,6 +2035,24 @@ body,
   background: rgba(166, 227, 161, 0.15);
   color: var(--success);
   border-color: var(--success);
+}
+.intent-toggle-btn {
+  flex: 0 0 auto;
+  min-width: 42px;
+  height: 26px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.intent-toggle-btn.active {
+  background: rgba(137, 180, 250, 0.15);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ── スラッシュコマンドサジェスト ── */
@@ -2399,6 +2418,12 @@ body,
   flex-direction: column;
   gap: 6px;
   margin-bottom: 6px;
+}
+.openrouter-intent-models {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 6px;
 }
 .openrouter-catalog-controls {
   display: flex;

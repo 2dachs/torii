@@ -2,7 +2,7 @@
   "name": "torii",
   "displayName": "Torii — AI Coding Agent for VS Code",
   "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
-  "version": "0.5.5",
+  "version": "0.5.7",
   "publisher": "pettal",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -31,11 +31,7 @@
     "local llm"
   ],
   "activationEvents": [
-    "onView:torii-view",
-    "onCommand:torii.openSettings",
-    "onCommand:torii.clearHistory",
-    "onCommand:torii.setupOllama",
-    "onCommand:torii.upgradePro"
+    "onView:torii-view"
   ],
   "main": "./dist/ext/extension.js",
   "contributes": {
@@ -246,6 +242,16 @@
           "items": { "type": "string" },
           "description": "OpenRouter よく使うモデルID（最大3件）。設定画面のスロットに表示される"
         },
+        "torii.openrouter.planningModel": {
+          "type": "string",
+          "default": "z-ai/glm-5.2",
+          "description": "OpenRouter 用途別ルーティング: 相談・レビュー・設計で使うモデルID"
+        },
+        "torii.openrouter.implementationModel": {
+          "type": "string",
+          "default": "deepseek/deepseek-v4-flash",
+          "description": "OpenRouter 用途別ルーティング: 実装・修正で使うモデルID"
+        },
         "torii.monthlyBudget": {
           "type": "number",
           "default": 10,
@@ -370,6 +376,9 @@
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --line-limit=120 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" --watch",
     "build:webview": "cd webview && npm run build",
     "dev:webview": "cd webview && npm run dev",
+    "test": "npm run test:router && npm run test:webview",
+    "test:router": "esbuild src/backend/lib/routerIntent.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-routerIntent.test.cjs --external:vscode && node --test /tmp/torii-routerIntent.test.cjs",
+    "test:webview": "node --test webview/src/budget.test.mjs",
     "lint": "eslint src --ext ts,tsx"
   },
   "devDependencies": {

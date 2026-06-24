@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import {
   PROVIDERS,
   ROUTER_CONFIG,
@@ -8,6 +7,7 @@ import {
   type ProviderDef,
   type ModelDef,
   type ProviderId,
+  type ModelIntent,
 } from '../../constants';
 import type { RoutingRule } from './routingRules';
 
@@ -19,6 +19,14 @@ export interface RouteResult {
   modelName: string;
   /** ルーティング理由 (ユーザー表示用) */
   reason: string;
+}
+
+export interface RouteOptions {
+  modelIntent?: ModelIntent;
+  executionMode?: 'chat' | 'agent';
+  openRouterPlanningModel?: string;
+  openRouterImplementationModel?: string;
+  customPrivacyKeywords?: string[];
 }
 
 /**
@@ -51,6 +59,7 @@ export class PromptRouter {
     hasImages: boolean,
     autoRoutingEnabled: boolean,
     customRules?: RoutingRule[],
+    options?: RouteOptions,
   ): RouteResult {
     const currentProvider: ProviderDef = PROVIDERS[currentProviderId];
     const currentModel: ModelDef | undefined = currentProvider.models.find(
@@ -108,9 +117,8 @@ export class PromptRouter {
     }
 
     // ── 2. プライバシー関連キーワード → Ollama ──
-    const customPrivacyKeywords = vscode.workspace
-      .getConfiguration(CONFIG_SECTION)
-      .get<string[]>(CONFIG_CUSTOM_PRIVACY_KEYWORDS, []);
+    const customPrivacyKeywords = options?.customPrivacyKeywords
+      ?? PromptRouter.getCustomPrivacyKeywords();
     const allPrivacyKeywords = [...ROUTER_CONFIG.privacyKeywords, ...customPrivacyKeywords];
     // 除外ワードが含まれる場合はプライバシールーティングをスキップ（token等のプログラミング用語誤検知防止）
     const hasExcludedTerm = ROUTER_CONFIG.privacyKeywordExcludes.some(
@@ -126,6 +134,29 @@ export class PromptRouter {
           providerName: ollama.name,
           modelName: ollamaModel.name,
           reason: '🔒 プライバシー関連のキーワードを検出。ローカル実行 (Ollama) に切り替えました',
+        };
+      }
+    }
+
+    // ── 2.5. OpenRouter 用途別モデル（手動指定または自動判定）──
+    const openRouterIntent = PromptRouter.resolveOpenRouterIntent(
+      lowerPrompt,
+      currentProviderId,
+      options,
+    );
+    if (openRouterIntent) {
+      const modelId = openRouterIntent === 'planning'
+        ? options?.openRouterPlanningModel?.trim()
+        : options?.openRouterImplementationModel?.trim();
+      if (modelId && modelId !== currentModelId) {
+        return {
+          providerId: 'openrouter',
+          modelId,
+          providerName: PROVIDERS.openrouter.name,
+          modelName: PromptRouter.resolveModelName(PROVIDERS.openrouter, modelId),
+          reason: openRouterIntent === 'planning'
+            ? '💬 相談・レビュー・設計タスクを検出。OpenRouterの相談モデルを選択しました'
+            : '🛠️ 実装タスクを検出。OpenRouterの実装モデルを選択しました',
         };
       }
     }
@@ -228,6 +259,50 @@ export class PromptRouter {
   /** キーワード配列のいずれかがテキストに含まれているか */
   static matchesAny(lowerText: string, keywords: readonly string[]): boolean {
     return keywords.some((kw) => lowerText.includes(kw));
+  }
+
+  private static resolveOpenRouterIntent(
+    lowerPrompt: string,
+    currentProviderId: ProviderId,
+    options?: RouteOptions,
+  ): Exclude<ModelIntent, 'auto'> | null {
+    if (options?.modelIntent === 'planning' || options?.modelIntent === 'implementation') {
+      return options.modelIntent;
+    }
+
+    if (currentProviderId !== 'openrouter') return null;
+
+    const planningKeywords = [
+      'レビュー', 'コードレビュー', 'review', '設計', '実装案', '方針',
+      '相談', 'architecture', 'architect', 'plan', 'planning', 'design',
+    ];
+    const implementationKeywords = [
+      '実装して', '修正して', '直して', '追加して', '変更して', '対応して',
+      'fix', 'implement', 'edit', 'update', 'change', 'add',
+    ];
+
+    if (PromptRouter.matchesAny(lowerPrompt, planningKeywords)) return 'planning';
+    if (PromptRouter.matchesAny(lowerPrompt, implementationKeywords)) return 'implementation';
+    if (options?.executionMode === 'agent') return 'implementation';
+
+    return null;
+  }
+
+  private static resolveModelName(provider: ProviderDef, modelId: string): string {
+    return provider.models.find((m) => m.id === modelId)?.name ?? modelId;
+  }
+
+  private static getCustomPrivacyKeywords(): string[] {
+    try {
+      // Keep vscode as a runtime-only dependency so router unit tests can run in Node.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const vscode = require('vscode') as typeof import('vscode');
+      return vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<string[]>(CONFIG_CUSTOM_PRIVACY_KEYWORDS, []);
+    } catch {
+      return [];
+    }
   }
 
   /** 画像対応可能なプロバイダーとモデルを探す */

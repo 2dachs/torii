@@ -76,11 +76,12 @@
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
-- OpenRouterモデル検索: 最新モデル一覧を取得して検索・スロット登録可能。GLM 5.2 / MiniMax M3 はプリセット単価込みで対応
+- OpenRouterモデル検索: 最新モデル一覧を取得して検索・スロット登録可能。GLM 5.2 / DeepSeek V4 Flash / MiniMax M3 はプリセット単価込みで対応
+- OpenRouter用途別ルーティング: 相談・レビュー・設計はGLM 5.2、実装・修正はDeepSeek V4 Flashへ自動/手動で切替可能
 - 価格更新: DeepSeek / Anthropic / Gemini の現行単価へ追従し、OpenRouter はAPIの current pricing を予算計算へ反映
 - 予算管理: 月間USD/JPY換算・バー表示・スコープ切替（グローバル/プロジェクト）
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
-- 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/タスク難易度/予算に応じてモデル自動切替
+- 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/タスク難易度/予算/用途別OpenRouterモデルに応じてモデル自動切替
 - タスク管理: JSON形式でローカル永続化（アトミック書き込み）
 - CommandGuard: 危険なコマンドパターンをブロック
 - 画像添付対応（マルチモーダルモデル + Gemini自動橋渡し）
@@ -108,6 +109,19 @@
 - **コンテキストウィンドウ管理**: トークン推定・上限80%超で警告・超過時に古メッセージ自動削除
 - **Agent予算制御**: チャットと同じ予算判定・モデル別上限フォールバックをAgent側にも適用
 - **プライバシールーティング除外ワード**: `token` 等プログラミング用語の誤検知防止
+- Irori MVP サブアプリ: `irori/` に Tauri + React + SQLite のデスクトップチャットMVPを追加し、Quick / Standard / Deep の3モードと OpenRouter 呼び出しの基礎を実装
+- Irori macOSアプリ出力: `tauri build` で `irori/src-tauri/target/release/bundle/macos/Irori.app` を生成し、Dock に置ける通常の Mac アプリとして起動可能
+- Irori 初期モデル更新: Standard の既定値を `DeepSeek V4 Pro` に変更し、Quick の `DeepSeek V4 Flash` と合わせて価格を最新の公開値へ寄せる
+- Irori Standard表示名補正: 旧DBで `GPT-4o` の表示名だけ残った場合も、起動時に `DeepSeek V4 Pro` へ正規化する
+- Irori APIキー保存: MVPでは毎回のKeychain許可を避けるため、OpenRouter APIキーをアプリDBへ保存する
+- Irori 検索MVP: `検索` / `調べて` / `最新` などの文言を検出した場合、Tavily APIキーが設定されていればTavily Search APIを優先し、検索結果URL・スニペット・使用creditsをLLMへの外部コンテキストとして渡す。Tavily未設定時のみDuckDuckGo公開JSON API、DuckDuckGo HTML、Brave Search HTMLの順でフォールバックする。`もう一度検索して` のような短い再検索指示では直前のユーザー話題を検索語として補完する
+- Irori 応答進行表示: 送信直後にユーザー発話を仮表示し、検索語を含む場合は `検索中`、それ以外は `考え中` のアシスタント仮バブルを表示。結果到着時はフェードインとスムーズスクロールで差し替える
+- Irori Enter送信: 通常Enterで送信、Shift+Enterで改行。IME変換中のEnterは送信しない
+- Irori レスポンシブUI: Desktopは3カラム、Tablet/Mobileはチャット中心の1カラム。ナビは左ドロワー、Usageは下部シート、Settingsはモーダル化
+- Irori 専用アイコン: 囲炉裏の火・暗い炉縁・格子をモチーフにした日本風Dark Academia寄りのアイコンを採用。白い外枠は使わない
+- Irori UIポリッシュ: 作成済み囲炉裏アイコンをUI内にも適用し、macOS標準日本語フォント、小さめの文字サイズ、薄い境界線、控えめなボタン密度でチャット本文を主役にする
+- Irori Rust warning解消: Tauriコマンド引数をsnake_caseへ整理し、未使用コードを削除。フロントからのcamelCase invokeは `rename_all = "camelCase"` で維持
+- OpenRouter用途別ルーティングの回帰テスト: `npm test` でルーティング単体テストと予算表示テストを実行可能
 - カスタムルーティングルール（キーワード→プロバイダー指定）
 - .pettal プロジェクト設定ファイル対応
 - モデル別コスト上限・セッション統計

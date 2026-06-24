@@ -2,6 +2,9 @@
 
 > コスト透明性とローカルLLMルーティングを備えた、日本語ファーストのAIコーディングエージェント。
 
+> Irori MVP は同一リポジトリ内の `irori/` に分離して追加しています。
+> Irori はチャット中の「検索」「調べて」「最新」などを検出し、Tavily Search API（キー設定時）または軽量Web検索結果をLLMへ渡すMVP機能を備えています。
+
 ---
 
 ## 機能
@@ -141,9 +144,10 @@ VS Code の設定（`settings.json`）に追加することで、任意のキー
 
 ## Features
 
-- **Multi-provider support** — OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini
+- **Multi-provider support** — OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
 - **Budget management (JPY/USD)** — monthly spend tracked with a visual progress bar; switch between yen and dollar display in settings
 - **Auto-routing to local LLM** — privacy-sensitive prompts are automatically sent to Ollama (no cloud)
+- **OpenRouter task routing** — use GLM 5.2 for review/design and DeepSeek V4 Flash for implementation via auto or one-shot manual switching
 - **Agent loop** — reads/writes files and runs commands autonomously with one-click approval
 - **Japanese UI** — all messages and error text in Japanese
 - **Streaming responses** — real-time output via SSE
@@ -172,6 +176,16 @@ ollama serve
 ```
 
 Then set the sub-provider to `Ollama` in Torii settings and enable auto-routing.
+
+## OpenRouter Task Routing
+
+When OpenRouter is the active provider, Torii can route by task type. Review, design, and implementation-plan prompts default to `z-ai/glm-5.2`; implementation and fix prompts default to `deepseek/deepseek-v4-flash`. Use the input toolbar's `Auto` / `相談` / `実装` buttons to override the next message only.
+
+Router and budget unit tests can be run with:
+
+```bash
+npm test
+```
 
 ## Pro Plan (¥980 / month)
 

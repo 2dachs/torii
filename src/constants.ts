@@ -136,6 +136,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     description: '1つのAPIキーで GPT-4o・Claude・Llama 等を使い分けられるゲートウェイ。openrouter.ai でキー取得。',
     models: [
       { id: 'z-ai/glm-5.2', name: 'GLM 5.2', tier: 'opus', description: 'OpenRouter経由の1M context対応エージェント向けモデル', supportsImages: false, inputCostPer1M: 1.20, outputCostPer1M: 4.10 },
+      { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', tier: 'flash', description: 'OpenRouter経由の1M context対応・低コスト実装向けモデル', supportsImages: false, inputCostPer1M: 0.09, outputCostPer1M: 0.18 },
       { id: 'minimax/minimax-m3', name: 'MiniMax M3', tier: 'pro', description: 'OpenRouter経由の1M context対応マルチモーダルモデル', supportsImages: true, inputCostPer1M: 0.30, outputCostPer1M: 1.20 },
     ],
   },
@@ -256,6 +257,11 @@ export const CONFIG_ESCALATE_MODEL_1 = 'escalateModel1';
 export const CONFIG_ESCALATE_PROVIDER_2 = 'escalateProvider2';
 export const CONFIG_ESCALATE_MODEL_2 = 'escalateModel2';
 export const CONFIG_DISPLAY_CURRENCY = 'displayCurrency';
+export const CONFIG_OPENROUTER_PLANNING_MODEL = 'openrouter.planningModel';
+export const CONFIG_OPENROUTER_IMPLEMENTATION_MODEL = 'openrouter.implementationModel';
+export const DEFAULT_OPENROUTER_PLANNING_MODEL = 'z-ai/glm-5.2';
+export const DEFAULT_OPENROUTER_IMPLEMENTATION_MODEL = 'deepseek/deepseek-v4-flash';
+export type ModelIntent = 'auto' | 'planning' | 'implementation';
 
 /** モデル別使用上限 */
 export interface ModelLimit {

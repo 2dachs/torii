@@ -58,11 +58,16 @@ import {
   CONFIG_ESCALATE_PROVIDER_2,
   CONFIG_ESCALATE_MODEL_2,
   CONFIG_DISPLAY_CURRENCY,
+  CONFIG_OPENROUTER_PLANNING_MODEL,
+  CONFIG_OPENROUTER_IMPLEMENTATION_MODEL,
+  DEFAULT_OPENROUTER_PLANNING_MODEL,
+  DEFAULT_OPENROUTER_IMPLEMENTATION_MODEL,
   DEFAULT_PROVIDER,
   DEFAULT_MONTHLY_BUDGET,
   DEFAULT_EXCHANGE_RATE,
   PROVIDERS,
   ProviderId,
+  ModelIntent,
   MSG_GET_LICENSE_STATUS,
   MSG_ACTIVATE_LICENSE,
   MSG_LICENSE_STATUS,
@@ -199,9 +204,9 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     switch (message.command) {
       case MSG_SEND_MESSAGE:
         if (message.agentMode === 'agent') {
-          await this._handleAgentMessage(message.text, message.taskId);
+          await this._handleAgentMessage(message.text, message.taskId, message.modelIntent);
         } else {
-          await this._handleSendMessage(message.text, message.taskId, message.images);
+          await this._handleSendMessage(message.text, message.taskId, message.images, message.modelIntent);
         }
         break;
       case MSG_AGENT_APPROVE:
@@ -364,6 +369,10 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
 
     const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
     const providerId = config.get<ProviderId>(CONFIG_PROVIDER, DEFAULT_PROVIDER);
+    const providerDef = PROVIDERS[providerId] || PROVIDERS[DEFAULT_PROVIDER];
+    const endpoint = config.get<string>(`${providerId}.endpoint`, providerDef.defaultEndpoint);
+    const model = config.get<string>(`${providerId}.model`, providerDef.defaultModel);
+    const maxTokens = config.get<number>(`${providerId}.maxTokens`, 4096);
     const monthlyBudget = config.get<number>(CONFIG_MONTHLY_BUDGET, DEFAULT_MONTHLY_BUDGET);
     const budgetScope = config.get<string>(CONFIG_BUDGET_SCOPE, DEFAULT_BUDGET_SCOPE);
     const autoRouting = config.get<boolean>('autoRouting', true);
@@ -379,6 +388,8 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     const escalateProvider2 = overrides?.escalateProvider2 ?? config.get<string>(CONFIG_ESCALATE_PROVIDER_2, '');
     const escalateModel2 = overrides?.escalateModel2 ?? config.get<string>(CONFIG_ESCALATE_MODEL_2, '');
     const displayCurrency = overrides?.displayCurrency ?? config.get<string>(CONFIG_DISPLAY_CURRENCY, 'JPY');
+    const openRouterPlanningModel = overrides?.openRouterPlanningModel ?? config.get<string>(CONFIG_OPENROUTER_PLANNING_MODEL, DEFAULT_OPENROUTER_PLANNING_MODEL);
+    const openRouterImplementationModel = overrides?.openRouterImplementationModel ?? config.get<string>(CONFIG_OPENROUTER_IMPLEMENTATION_MODEL, DEFAULT_OPENROUTER_IMPLEMENTATION_MODEL);
     const secrets = getSecretsManager(this._context);
 
     // .pettal ファイル読み込み
@@ -440,6 +451,9 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       data: {
         provider: providerId,
         providers,
+        endpoint,
+        model,
+        maxTokens,
         monthlyBudget,
         budgetScope,
         autoRouting,
@@ -455,6 +469,8 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         escalateProvider2,
         escalateModel2,
         displayCurrency,
+        openRouterPlanningModel,
+        openRouterImplementationModel,
         pettalConfig,
         hasPettalFile,
         workspaceRoot,
@@ -504,6 +520,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     text: string,
     taskId?: string,
     images?: { data: string; mimeType: string }[],
+    modelIntent?: ModelIntent,
   ) {
     // Webview から送られてきたメッセージをバックエンドの Express サーバーに転送
     const workspaceId = this._getWorkspaceId();
@@ -511,6 +528,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     const payload: any = { message: text, workspaceId, stream: true };
     if (taskId) payload.taskId = taskId;
     if (images && images.length > 0) payload.images = images;
+    if (modelIntent) payload.modelIntent = modelIntent;
 
     const postData = JSON.stringify(payload);
 
@@ -826,11 +844,11 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   /** エージェントモードでメッセージを送信（SSEストリーミング） */
-  private async _handleAgentMessage(text: string, taskId?: string) {
+  private async _handleAgentMessage(text: string, taskId?: string, modelIntent?: ModelIntent) {
     if (!this._view) return;
     const workspaceId = this._getWorkspaceId();
 
-    const payload = JSON.stringify({ message: text, workspaceId, taskId: taskId || null });
+    const payload = JSON.stringify({ message: text, workspaceId, taskId: taskId || null, ...(modelIntent ? { modelIntent } : {}) });
     this._currentAgentTaskId = taskId || null;
 
     const options = {
@@ -1023,6 +1041,12 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     }
     if (config.displayCurrency !== undefined) {
       await configTarget.update(CONFIG_DISPLAY_CURRENCY, config.displayCurrency, vscode.ConfigurationTarget.Global);
+    }
+    if (config.openRouterPlanningModel !== undefined) {
+      await configTarget.update(CONFIG_OPENROUTER_PLANNING_MODEL, config.openRouterPlanningModel, vscode.ConfigurationTarget.Global);
+    }
+    if (config.openRouterImplementationModel !== undefined) {
+      await configTarget.update(CONFIG_OPENROUTER_IMPLEMENTATION_MODEL, config.openRouterImplementationModel, vscode.ConfigurationTarget.Global);
     }
     await this._sendSettingsConfig(config);
   }

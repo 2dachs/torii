@@ -6,6 +6,8 @@ webview/node_modules/
 dist/
 out/
 webview/dist/
+target/
+irori/src-tauri/gen/schemas/
 
 # Environment variables
 .env
@@ -25,6 +27,10 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+*.swp
+
+# Local tool shims
+irori/bin/
 
 # TypeScript
 *.tsbuildinfo

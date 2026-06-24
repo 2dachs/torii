@@ -127,11 +127,18 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 実装済み機能
 
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
-- OpenRouterモデル検索: 最新モデル一覧を取得して検索・スロット登録可能。GLM 5.2 / MiniMax M3 はプリセット単価込みで対応
+- OpenRouterモデル検索: 最新モデル一覧を取得して検索・スロット登録可能。GLM 5.2 / DeepSeek V4 Flash / MiniMax M3 はプリセット単価込みで対応
+- OpenRouter用途別ルーティング: 相談・レビュー・設計はGLM 5.2、実装・修正はDeepSeek V4 Flashへ自動/手動で切替可能
 - 価格更新: DeepSeek / Anthropic / Gemini の現行単価へ追従し、OpenRouter はAPIの current pricing を予算計算へ反映
 - 予算管理: 月間USD/JPY換算・バー表示・スコープ切替（グローバル/プロジェクト）
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
 - 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/難易度/予算に応じてモデル自動切替
+- Irori 検索MVP: `検索` / `調べて` / `最新` などの文言を検出した場合、Tavily APIキーが設定されていればTavily Search APIを優先し、検索結果URL・スニペット・使用creditsをLLMへの外部コンテキストとして渡す。Tavily未設定時のみDuckDuckGo公開JSON API、DuckDuckGo HTML、Brave Search HTMLの順でフォールバックする。`もう一度検索して` のような短い再検索指示では直前のユーザー話題を検索語として補完する
+- Irori 応答進行表示: 送信直後にユーザー発話を仮表示し、検索語を含む場合は `検索中`、それ以外は `考え中` のアシスタント仮バブルを表示。結果到着時はフェードインとスムーズスクロールで差し替える
+- Irori Enter送信: 通常Enterで送信、Shift+Enterで改行。IME変換中のEnterは変換確定として扱い、誤送信しない
+- Irori レスポンシブUI: デスクトップは3カラム、タブレット/スマホはチャット中心の1カラムに切替。Projects/Conversationsは左ドロワー、Routing/Usageは下部シート、Settingsはモーダルで表示
+- Irori 専用アイコン: Toriiアイコン流用をやめ、囲炉裏の火・炉縁・格子をモチーフにした日本風Dark Academia寄りのアプリアイコンへ差し替え
+- Irori UIポリッシュ: 作成済み囲炉裏アイコンをサイドバー/モバイルトップバーへ適用し、macOS標準フォント・小さめの文字サイズ・薄い境界線でチャット本文優先の見た目へ調整
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
@@ -165,6 +172,69 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ---
 
 ## 修正・変更ログ
+
+### 2026-06-23
+- **Irori MVP サブアプリ新設**:
+  - **`irori/`**: Tauri + React + TypeScript + SQLite のデスクトップAIチャットMVPを新規追加。Quick / Standard / Deep の3モード、OpenRouterチャット、推定コスト、使用量ログ、プロジェクト分離の土台を実装
+- **Irori macOSアプリ化**:
+  - **`irori/src-tauri/tauri.conf.json`**: `bundle.active = true` / `targets = ["app"]` を有効化し、`tauri build` で `Irori.app` を生成するよう変更
+  - **`irori/package.json`**: `app:open` / `app:build-open` を追加し、ビルド後に Finder から開ける導線を用意
+  - **`irori/vite.config.ts`**: dev server を `127.0.0.1` に固定して Tauri dev 起動の安定性を改善
+- **Irori 初期モデル更新**:
+  - **`irori/src/App.tsx` / `irori/src-tauri/src/db.rs`**: Standard の既定モデルを `DeepSeek V4 Pro`（`deepseek/deepseek-chat-v4-pro`）に変更し、Quick の `DeepSeek V4 Flash` と価格を最新の公開値に合わせて更新
+- **Irori APIキー保存先のKeychain移行**:
+  - **`irori/src-tauri/src/keychain.rs`**: OpenRouter APIキーを macOS Keychain へ保存・読み出し・削除するラッパーを追加
+  - **`irori/src-tauri/src/db.rs`**: `app_settings` の `open_router_api_key` は空欄運用に変更し、旧DB平文は初回読込時に Keychain へ移行して削除するよう変更
+
+### 2026-06-24
+- **Irori 検索MVP追加**:
+  - **`irori/src-tauri/src/search.rs`**: `検索` / `調べて` / `最新` などの文言を検出し、DuckDuckGo公開JSON APIで軽量検索する処理を追加
+  - **`irori/src-tauri/src/main.rs`**: 検索結果をOpenRouter呼び出し前のsystem messageとして差し込み、LLMがURL付きの外部コンテキストを参照できるよう変更
+  - **`irori/README.md` / `DESIGN.md`**: 検索MVPの仕様と、MVPではAPIキーをアプリDB保存に戻した運用を追記
+- **Irori 検索MVPの再検索修正**:
+  - **`irori/src-tauri/src/search.rs`**: DuckDuckGo JSON結果が空またはパース不能の場合にDuckDuckGo HTML / Brave Search HTMLへフォールバックする処理を追加し、再検索指示の不要語を検索語から除去
+  - **`irori/src-tauri/src/main.rs`**: `もう一度検索して` のような短い指示では直前のユーザー発話から検索語を補完し、検索結果をsystem messageと直近ユーザー発話の両方へ差し込むよう変更
+- **Irori Tavily検索対応**:
+  - **`irori/src-tauri/src/search.rs`**: Tavily Search API呼び出しを追加。Tavily APIキー設定時はTavilyを優先し、`search_depth` / `max_results` / `include_usage` を指定して検索結果とcreditsを取得
+  - **`irori/src-tauri/src/db.rs` / `irori/src-tauri/src/models.rs` / `irori/src-tauri/src/main.rs`**: `tavily_api_key` / `tavily_search_depth` / `tavily_max_results` を `app_settings` に追加し、既存DBは `ALTER TABLE` で移行
+  - **`irori/src/App.tsx` / `irori/src/types.ts` / `irori/src/styles.css`**: Settings画面にTavily API key、search depth、max resultsを追加
+- **Irori Tavily設定保存バグ修正**:
+  - **`irori/src/App.tsx`**: `settingsDirty` に `tavilyApiKey` / `tavilySearchDepth` / `tavilyMaxResults` を追加。Tavily項目だけ変更した場合も保存ボタンが有効になるよう修正
+  - **`irori/src/App.tsx`**: Tavily APIキー保存済み状態が分かる補助表示を追加
+- **Irori 応答進行表示追加**:
+  - **`irori/src/App.tsx`**: 送信中の仮ターン状態を追加し、ユーザー発話を即時表示。検索語を含む場合は `検索中`、通常時は `考え中` のアシスタント仮バブルを表示
+  - **`irori/src/styles.css`**: タイピングドット、メッセージフェードイン、スムーズスクロール、送信中ステータスピルを追加
+- **Irori Standard表示名マイグレーション修正**:
+  - **`irori/src-tauri/src/db.rs`**: Standard の実モデルが `deepseek/deepseek-v4-pro` に移行済みでも、既存DBの表示名だけ `GPT-4o` と残るケースを起動時に `DeepSeek V4 Pro` へ補正
+  - **`irori/src-tauri/src/db.rs`**: `model_configs` を設定値から毎回同期し、既知のモデルslugは表示名も正規化するよう変更
+- **Irori Enter送信対応**:
+  - **`irori/src/lib/composerKeys.ts`**: ComposerのEnter送信判定を純関数として追加。IME変換中や `keyCode = 229` のEnter、Shift+Enterでは送信しない
+  - **`irori/src/App.tsx`**: 入力欄の `onKeyDown` で通常Enter送信、Shift+Enter改行、送信中/空入力の抑止を実装
+- **Irori Web/スマホ向けUI刷新**:
+  - **`irori/src/App.tsx`**: モバイル用トップバー、Projects/Conversationsドロワー、Routing/Usage下部シート、Settingsモーダルを追加。入力欄付近に `Mode · Model · 約¥` の常時要約を表示
+  - **`irori/src/styles.css`**: 生成り・墨・深緑を基調にしたClaude寄りの落ち着いた配色へ刷新。デスクトップ/タブレット/モバイルのブレークポイントを整理し、スマホではチャット領域を最優先に表示
+- **Irori 専用アイコン追加**:
+  - **`irori/src-tauri/icons/irori-icon.svg`**: 囲炉裏の火、暗い炉縁、格子を抽象化した日本風Dark Academia寄りのSVGアイコンを追加。白い外枠に見える明色フレームは使わない
+  - **`irori/src-tauri/icons/icon.png`**: Tauriが参照するアプリアイコンPNGをIrori専用アイコンへ差し替え
+- **Irori UIポリッシュ**:
+  - **`irori/src/assets/irori-icon.svg` / `irori/src/App.tsx`**: フロント用アイコン資産を追加し、サイドバーの `井` テキストマークとモバイルトップバーを作成済みIroriアイコンへ差し替え
+  - **`irori/src/styles.css`**: Avenir Next主体をやめ、macOS標準日本語フォント中心へ変更。Hero、サイドバー、Usage、Composer、メッセージ本文のサイズ/余白/太さを抑えて、Claude寄りの静かな読みやすさに調整
+- **Irori Rust warning解消**:
+  - **`irori/src-tauri/src/main.rs`**: Tauriコマンドに `rename_all = "camelCase"` を指定し、Rust側引数をsnake_caseへ変更。フロントのcamelCase呼び出し互換は維持
+  - **`irori/src-tauri/src/db.rs` / `irori/src-tauri/src/openrouter.rs`**: 未使用の `mut`、未使用関数、未使用structを削除し、`cargo test` / `tauri build` の警告を解消
+
+### 2026-06-22
+- **0.5.7 OpenRouter用途別モデル切替**:
+  - **`src/backend/lib/router.ts`**: `modelIntent` による OpenRouter 用途別ルーティングを追加。相談・レビュー・設計は `z-ai/glm-5.2`、実装・修正は `deepseek/deepseek-v4-flash` を既定で選択
+  - **`src/backend/lib/router.ts`**: 手動の `相談` / `実装` 指定は現在プロバイダーがDeepSeek等でもOpenRouter用途別モデルへ切り替わるよう修正
+  - **`src/backend/server.ts` / `src/webview/provider.ts`**: チャット/エージェント双方で一時的な用途指定を転送し、VS Code設定の用途別OpenRouterモデルを読み書きするよう変更
+  - **`src/webview/provider.ts`**: `settingsConfig` に `model` / `endpoint` / `maxTokens` を再度含め、Webview上で `DeepSeek ()` のようにモデル名が空表示になる問題を修正
+  - **`webview/src/App.tsx` / `webview/src/styles.css`**: 入力欄に `Auto` / `相談` / `実装` の今回だけ切替を追加。OpenRouter設定画面に用途別モデル入力を追加
+  - **`src/backend/lib/openRouterPricing.ts`**: `response.json()` のレスポンス型を明示し、拡張機能側の `tsc --noEmit` が通るよう修正
+  - **`src/constants.ts` / `package.json` / `package-lock.json`**: `torii.openrouter.planningModel` / `torii.openrouter.implementationModel` を追加し、DeepSeek V4 Flashプリセットと `0.5.7` へ更新
+  - **`package.json` / `.vscode/settings.json`**: VS Code 1.85以降で不要な `onCommand:*` activationEvents を削除し、Spell Checker用のプロジェクト辞書に固有名詞を追加
+  - **`src/backend/lib/routerIntent.test.ts` / `package.json`**: OpenRouter用途別ルーティングのNodeテストと `npm test` を追加。`router.ts` はVS Code APIを遅延読み込みにして単体テスト可能に変更
+  - **`.gitignore`**: Irori/Tauriの `target`、生成schema、swap、ローカルcargo wrapperを除外し、未追跡一覧に生成物が混ざらないよう整理
 
 ### 2026-06-21
 - **0.5.4 プロジェクトフォルダ起動時の安定化**:
