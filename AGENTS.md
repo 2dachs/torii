@@ -176,6 +176,15 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-26
+- **0.6.0 大きな差分表示によるRenderer応答停止対策**:
+  - **`src/backend/tools.ts` / `src/backend/diffPreviewPolicy.ts`**: `write_file` / `replace_in_file` の承認前差分表示にサイズ上限を追加。大きなファイル変更ではVS Codeの差分タブを開かず、承認イベントにも `oldContent` / `newContent` の本文を載せないよう変更
+  - **`webview/src/App.tsx` / `webview/src/types.ts`**: 差分プレビューを省略した場合、承認カードに理由を表示するよう変更
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.0` へ更新
+
+- **0.5.9 Torii View Containerアイコン差し替え**:
+  - **`package.json`**: VS Code下部パネルのView Containerアイコンを `$(hubot)` から `resources/icon.svg` に変更。Toriiパネルを開いた時の左上アイコンもToriiアイコン表示に統一
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.9` へ更新
+
 - **0.5.8 Torii起動時フリーズ対策**:
   - **`webview/src/App.tsx`**: Webview起動直後に最新タスクを自動選択してチャット履歴を全読み込みする処理を廃止。巨大な履歴や添付コンテキストを含む最新タスクがある場合に、Toriiを開くだけでVS Code Rendererが応答不能になるリスクを削減
   - **`.vscodeignore`**: `irori/`、`irori-web/`、`packages/`、`docs/` をVSIXから除外。Torii拡張に不要なサブアプリ資産がVSIXへ混入して巨大化する問題を防止

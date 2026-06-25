@@ -2,7 +2,7 @@
   "name": "torii",
   "displayName": "Torii — AI Coding Agent for VS Code",
   "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
-  "version": "0.5.8",
+  "version": "0.6.0",
   "publisher": "pettal",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -40,7 +40,7 @@
         {
           "id": "torii-panel",
           "title": "Torii",
-          "icon": "$(hubot)"
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -376,8 +376,9 @@
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --line-limit=120 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" --watch",
     "build:webview": "cd webview && npm run build",
     "dev:webview": "cd webview && npm run dev",
-    "test": "npm run test:router && npm run test:webview",
+    "test": "npm run test:router && npm run test:diff-preview && npm run test:webview",
     "test:router": "esbuild src/backend/lib/routerIntent.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-routerIntent.test.cjs --external:vscode && node --test /tmp/torii-routerIntent.test.cjs",
+    "test:diff-preview": "esbuild src/backend/diffPreviewPolicy.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-diffPreviewPolicy.test.cjs && node --test /tmp/torii-diffPreviewPolicy.test.cjs",
     "test:webview": "node --test webview/src/budget.test.mjs",
     "lint": "eslint src --ext ts,tsx"
   },

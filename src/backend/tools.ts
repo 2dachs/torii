@@ -8,6 +8,7 @@ import type { AgentTool } from '@cline/agents';
 import { isTerminalCommandSafe } from './commandGuard';
 import { requestApproval } from './approvalManager';
 import { CONFIG_COMMAND_ALLOWLIST, CONFIG_SECTION } from '../constants';
+import { getDiffPreviewDecision } from './diffPreviewPolicy';
 
 let _outputChannel: vscode.OutputChannel | null = null;
 function getOutputChannel(): vscode.OutputChannel {
@@ -264,22 +265,41 @@ export async function buildClineTools(
     newContent: string,
     label: string,
   ): Promise<boolean> => {
-    const tmpOld = path.join(os.tmpdir(), `torii-old-${id}`);
-    const tmpNew = path.join(os.tmpdir(), `torii-new-${id}`);
+    let tmpOld: string | null = null;
+    let tmpNew: string | null = null;
     const diffTitle = `Torii diff: ${label}`;
+    const previewDecision = getDiffPreviewDecision(oldContent, newContent);
 
-    try {
-      fs.writeFileSync(tmpOld, oldContent, 'utf-8');
-      fs.writeFileSync(tmpNew, newContent, 'utf-8');
-      await vscode.commands.executeCommand('vscode.diff',
-        vscode.Uri.file(tmpOld),
-        vscode.Uri.file(tmpNew),
-        diffTitle,
-        { preview: true },
-      );
-    } catch { /* diff表示失敗でも承認フローは続行 */ }
+    if (previewDecision.openDiff) {
+      tmpOld = path.join(os.tmpdir(), `torii-old-${id}`);
+      tmpNew = path.join(os.tmpdir(), `torii-new-${id}`);
+      try {
+        fs.writeFileSync(tmpOld, oldContent, 'utf-8');
+        fs.writeFileSync(tmpNew, newContent, 'utf-8');
+        await vscode.commands.executeCommand('vscode.diff',
+          vscode.Uri.file(tmpOld),
+          vscode.Uri.file(tmpNew),
+          diffTitle,
+          { preview: true },
+        );
+      } catch { /* diff表示失敗でも承認フローは続行 */ }
+    } else if (previewDecision.reason) {
+      getOutputChannel().appendLine(`[diff-preview-skipped] ${label}: ${previewDecision.reason}`);
+    }
 
-    onEvent({ type: 'approval_required', id, tool, data });
+    const { oldContent: _oldContent, newContent: _newContent, ...approvalData } = data as Record<string, unknown>;
+    onEvent({
+      type: 'approval_required',
+      id,
+      tool,
+      data: {
+        ...approvalData,
+        oldSize: oldContent.length,
+        newSize: newContent.length,
+        diffPreviewSkipped: !previewDecision.openDiff,
+        diffPreviewSkippedReason: previewDecision.reason,
+      },
+    });
     const approved = await requestApproval(id);
 
     // diffタブを閉じる（VSCode 1.71+ tabGroups API）
@@ -293,8 +313,12 @@ export async function buildClineTools(
       }
     } catch { /* 閉じられない場合は無視 */ }
 
-    try { fs.unlinkSync(tmpOld); } catch { /* ignore */ }
-    try { fs.unlinkSync(tmpNew); } catch { /* ignore */ }
+    if (tmpOld) {
+      try { fs.unlinkSync(tmpOld); } catch { /* ignore */ }
+    }
+    if (tmpNew) {
+      try { fs.unlinkSync(tmpNew); } catch { /* ignore */ }
+    }
 
     return approved;
   };

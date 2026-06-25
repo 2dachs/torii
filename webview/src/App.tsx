@@ -2179,9 +2179,14 @@ function App() {
             </>
           )}
           {(approval.tool === 'write_file' || approval.tool === 'replace_in_file') && (
-            <div className="approval-header">
-              {approval.tool === 'replace_in_file' ? '✏️' : '📄'} {(approval.data as any).path} を変更しますか？
-            </div>
+            <>
+              <div className="approval-header">
+                {approval.tool === 'replace_in_file' ? '✏️' : '📄'} {(approval.data as any).path} を変更しますか？
+              </div>
+              {(approval.data as any).diffPreviewSkippedReason && (
+                <div className="approval-security-notice">{(approval.data as any).diffPreviewSkippedReason}</div>
+              )}
+            </>
           )}
           <div className="approval-actions">
             <button className="approval-btn approve" onClick={() => handleApprove(approval.id, true)}>
