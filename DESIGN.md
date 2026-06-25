@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.5.5）
+## 3. 現在の実装状態（v0.5.6）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
@@ -119,9 +119,13 @@
 - Irori Enter送信: 通常Enterで送信、Shift+Enterで改行。IME変換中のEnterは送信しない
 - Irori レスポンシブUI: Desktopは3カラム、Tablet/Mobileはチャット中心の1カラム。ナビは左ドロワー、Usageは下部シート、Settingsはモーダル化
 - Irori 専用アイコン: 囲炉裏の火・暗い炉縁・格子をモチーフにした日本風Dark Academia寄りのアイコンを採用。白い外枠は使わない
-- Irori UIポリッシュ: 作成済み囲炉裏アイコンをUI内にも適用し、macOS標準日本語フォント、小さめの文字サイズ、薄い境界線、控えめなボタン密度でチャット本文を主役にする
+- Irori UIポリッシュ: 作成済み囲炉裏アイコンをUI内にも適用し、macOS標準日本語フォントから Dark Academia 寄りの日本語セリフへ寄せ、暗い生成り背景・細い金色境界線・控えめなボタン密度でチャット本文を主役にする
 - Irori Rust warning解消: Tauriコマンド引数をsnake_caseへ整理し、未使用コードを削除。フロントからのcamelCase invokeは `rename_all = "camelCase"` で維持
 - OpenRouter用途別ルーティングの回帰テスト: `npm test` でルーティング単体テストと予算表示テストを実行可能
+- Irori Dark Academia UI再調整: フォントを Noto Serif JP / Garamond 系へ寄せ、全体配色を黒茶・金の落ち着いたトーンへ更新。ブランド、モード、Usage、Settings の見た目も静かな読み物寄りに整理
+- Irori メッセージ対比調整: Irori 応答を独立した暗めサーフェスに載せ、ユーザー発話は金色の濃淡バブルにしてコントラスト差を明確化
+- Irori Web版 MVP着手: `irori-web/` に Next.js App Router + TypeScript + Tailwind CSS + Supabase のWeb版を新設。Googleログイン、認証後チャットUI、APIキー設定、アカウント管理、モード別モデル候補選択、Supabase RLS/Vault/Edge Functionの初期実装を追加
+- Irori 共有core: `packages/core/` にトークン概算、コスト計算、ルーティング関数と型を切り出し、Web版から参照できる構成にした
 - カスタムルーティングルール（キーワード→プロバイダー指定）
 - .pettal プロジェクト設定ファイル対応
 - モデル別コスト上限・セッション統計

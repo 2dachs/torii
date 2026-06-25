@@ -1,0 +1,7 @@
+project_id = "irori-web"
+
+[functions.send_message]
+verify_jwt = true
+
+[functions.save_api_key]
+verify_jwt = true

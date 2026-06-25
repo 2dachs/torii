@@ -14,6 +14,10 @@ DESIGN.md
 CLAUDE.md
 package-lock.json
 .github/**
+docs/**
+irori/**
+irori-web/**
+packages/**
 webview/src/**
 webview/node_modules/**
 webview/package.json

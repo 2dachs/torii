@@ -139,6 +139,8 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - Irori レスポンシブUI: デスクトップは3カラム、タブレット/スマホはチャット中心の1カラムに切替。Projects/Conversationsは左ドロワー、Routing/Usageは下部シート、Settingsはモーダルで表示
 - Irori 専用アイコン: Toriiアイコン流用をやめ、囲炉裏の火・炉縁・格子をモチーフにした日本風Dark Academia寄りのアプリアイコンへ差し替え
 - Irori UIポリッシュ: 作成済み囲炉裏アイコンをサイドバー/モバイルトップバーへ適用し、macOS標準フォント・小さめの文字サイズ・薄い境界線でチャット本文優先の見た目へ調整
+- Irori Web版 MVP着手: `irori-web/` に Next.js App Router + TypeScript + Tailwind CSS + Supabase 構成を新設。Googleログイン、認証後チャットUI、Settings、モード別モデル候補選択、Supabase RLS/Vault/Edge Functions の初期実装を追加
+- Irori 共有core: `packages/core/` に `estimateTokens` / `calculateCost` / `routeMessage` と型定義を切り出し、Web版から利用できるようにした
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
@@ -173,6 +175,12 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ## 修正・変更ログ
 
+### 2026-06-26
+- **0.5.8 Torii起動時フリーズ対策**:
+  - **`webview/src/App.tsx`**: Webview起動直後に最新タスクを自動選択してチャット履歴を全読み込みする処理を廃止。巨大な履歴や添付コンテキストを含む最新タスクがある場合に、Toriiを開くだけでVS Code Rendererが応答不能になるリスクを削減
+  - **`.vscodeignore`**: `irori/`、`irori-web/`、`packages/`、`docs/` をVSIXから除外。Torii拡張に不要なサブアプリ資産がVSIXへ混入して巨大化する問題を防止
+  - **`package.json` / `package-lock.json`**: 修正版として `0.5.8` へ更新
+
 ### 2026-06-23
 - **Irori MVP サブアプリ新設**:
   - **`irori/`**: Tauri + React + TypeScript + SQLite のデスクトップAIチャットMVPを新規追加。Quick / Standard / Deep の3モード、OpenRouterチャット、推定コスト、使用量ログ、プロジェクト分離の土台を実装
@@ -187,6 +195,31 @@ npm run vscode:prepublish  # 両方まとめてビルド
   - **`irori/src-tauri/src/db.rs`**: `app_settings` の `open_router_api_key` は空欄運用に変更し、旧DB平文は初回読込時に Keychain へ移行して削除するよう変更
 
 ### 2026-06-24
+- **Irori Web Project/Conversation ID検証修正**:
+  - **`irori-web/src/components/irori-web-app.tsx`**: `activeProjectId` / `activeConversationId` を取得済み一覧に存在する場合だけ再利用し、存在しない場合は先頭行へ補正するよう変更。送信時も実在する `activeProject` / `activeConversation` のIDだけを送るよう修正
+  - **`irori-web/supabase/functions/send_message/index.ts`**: Project / Conversation / Settings の検証エラーを個別メッセージに分け、原因を判別しやすくした
+- **Irori Web送信時Project解決の堅牢化**:
+  - **`irori-web/supabase/functions/send_message/index.ts`**: `send_message` でクライアント送信の `projectId` に依存せず、検証済み `conversation.project_id` からProjectを解決するよう変更。staleなProject IDが混ざっても、Conversationが正しければ送信できるようにした
+- **Irori Web送信前Conversation自動復旧**:
+  - **`irori-web/src/components/irori-web-app.tsx`**: 送信直前にProject / ConversationがDB上に存在するか確認し、存在しない場合は現在ユーザーで新しいProject / Conversationを作成してから送信するよう変更。staleな会話IDで送信が止まる問題を抑止
+- **Irori Web Edge送信ID/Settings自動復旧**:
+  - **`irori-web/supabase/functions/send_message/index.ts`**: `send_message` 側でも missing Project / Conversation / Settings を自動作成し、作成後の canonical ID をレスポンスへ返すよう変更。初回ユーザーや stale ID でも送信を継続できるようにした
+  - **`irori-web/src/components/irori-web-app.tsx`**: Edge Function から返った canonical project/conversation ID をフロント状態へ同期し、以後の送信で古いIDを使い続けないよう修正
+  - **`irori-web/supabase/functions/send_message/index.ts`**: Edge Function の catch で PostgREST/RPC エラーの `message` / `details` / `hint` / `code` をUIへ返すよう変更
+- **Irori Web service_role権限修正**:
+  - **`irori-web/supabase/migrations/202606240004_service_role_table_grants.sql`**: Edge Function の admin client が `app_settings` などを読み書きできるよう、`service_role` に必要な table 権限を付与
+- **Irori Web応答進行表示追加**:
+  - **`irori-web/src/components/irori-web-app.tsx` / `irori-web/src/app/globals.css`**: デスクトップ版と同じく、送信直後にユーザー発話を仮表示し、通常時は `考え中`、検索語を含む場合は `検索中` のIrori仮バブルを表示。回答到着時はフェードインと `scrollIntoView({ behavior: 'smooth' })` で回答先頭へ滑らかに移動するよう変更
+- **Irori Web APIキー保存状態表示**:
+  - **`irori-web/src/components/irori-web-app.tsx`**: Settings のAPIキー欄に `保存済み` / `未設定` を表示し、保存済みキーは平文再表示せず「変更する場合のみ入力」のplaceholderを出すよう変更。保存成功後はローカル状態も即時更新する
+- **Irori Web Edge Functionエラー表示改善**:
+  - **`irori-web/src/components/irori-web-app.tsx`**: Supabase Edge Function が non-2xx を返した場合に `FunctionsHttpError` の `context` レスポンス本文を読み、`error` / `message` をUIへ表示するよう変更。OpenRouter拒否、APIキー未設定、payload不正などの具体原因が見えるようにした
+- **Irori Webモデル選択UI修正**:
+  - **`irori-web/src/lib/model-configs.ts` / `irori-web/src/components/irori-web-app.tsx`**: Settings の Quick / Standard / Deep を自由入力から候補選択へ変更。Quick は DeepSeek V4 Flash、Standard は DeepSeek V4 Pro / GPT-4o、Deep は Fugu / OpenRouter Fusion / Claude Opus 4.8 から選択可能にした
+  - **`irori-web/supabase/functions/send_message/index.ts`**: Edge Function 側も `app_settings` の選択slugから provider / displayName / price を解決するよう変更。Fugu選択時は Fugu APIキー、Fusion/Opus/GPT-4o/DeepSeek 選択時は OpenRouter APIキーを使う
+  - **`irori-web/supabase/migrations/202606240003_model_mode_options.sql`**: 既存 `model_configs` の DeepSeek V4 Flash / Pro 価格と context window を現在の OpenRouter 値へ補正する migration を追加
+- **Irori Webアカウント管理追加**:
+  - **`irori-web/src/components/irori-web-app.tsx`**: Settings モーダル内に現在のログインメール、ログアウト、別アカウントでログイン導線を追加。`handleLogout` でモーダルやサイドパネルも閉じるように変更
 - **Irori 検索MVP追加**:
   - **`irori/src-tauri/src/search.rs`**: `検索` / `調べて` / `最新` などの文言を検出し、DuckDuckGo公開JSON APIで軽量検索する処理を追加
   - **`irori/src-tauri/src/main.rs`**: 検索結果をOpenRouter呼び出し前のsystem messageとして差し込み、LLMがURL付きの外部コンテキストを参照できるよう変更
@@ -219,6 +252,18 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - **Irori UIポリッシュ**:
   - **`irori/src/assets/irori-icon.svg` / `irori/src/App.tsx`**: フロント用アイコン資産を追加し、サイドバーの `井` テキストマークとモバイルトップバーを作成済みIroriアイコンへ差し替え
   - **`irori/src/styles.css`**: Avenir Next主体をやめ、macOS標準日本語フォント中心へ変更。Hero、サイドバー、Usage、Composer、メッセージ本文のサイズ/余白/太さを抑えて、Claude寄りの静かな読みやすさに調整
+- **Irori Dark Academia UI再調整**:
+  - **`irori/src/styles.css`**: 配色を黒茶・金のダークアカデミア寄りに更新し、Noto Serif JP / Garamond 系のセリフ体を前面に出すよう再調整。パネル、入力、メッセージ、Settings の境界線と密度もさらに静かな方向へ寄せた
+- **Irori メッセージ対比調整**:
+  - **`irori/src/styles.css`**: Irori 側の応答を独立したサーフェスカード化し、ユーザー発話は暗い金色バブル＋濃い文字に変更。左右の読み取り差を明確にして、ダーク背景上でも境界が曖昧にならないよう修正
+- **Irori ユーザーバブル文字色調整**:
+  - **`irori/src/styles.css`**: 右側バブルの文字色を `#1a1814` に統一し、背景の金色系は維持したまま可読性を少しだけ締めた
+- **Irori ユーザーバブル明度調整**:
+  - **`irori/src/styles.css`**: 右側バブルの背景を `#c9a96e` 基準の明るい金へ戻し、タイムスタンプを `#3a2e20` にして Irori 側カードとの対比を強めた
+- **Irori Web版 MVP初期実装**:
+  - **`packages/core/`**: `estimateTokens` / `calculateCost` / `routeMessage` と共有型を追加し、Node標準testでコスト計算・ルーティングのテストを追加
+  - **`irori-web/`**: Next.js App Router + Tailwind + Supabase のWeb版を新設。Googleログイン、Projects/Conversations/Chat、Quick/Standard/Deep、Settings、モード別モデル候補選択、レスポンシブUIを実装
+  - **`irori-web/supabase/`**: profiles/projects/conversations/messages/model_configs/usage_logs/app_settings/api_key_secrets のPostgres schema、RLS、Vault RPC、`save_api_key` / `send_message` Edge Functionsを追加
 - **Irori Rust warning解消**:
   - **`irori/src-tauri/src/main.rs`**: Tauriコマンドに `rename_all = "camelCase"` を指定し、Rust側引数をsnake_caseへ変更。フロントのcamelCase呼び出し互換は維持
   - **`irori/src-tauri/src/db.rs` / `irori/src-tauri/src/openrouter.rs`**: 未使用の `mut`、未使用関数、未使用structを削除し、`cargo test` / `tauri build` の警告を解消

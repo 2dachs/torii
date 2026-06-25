@@ -621,16 +621,6 @@ function App() {
           if (Array.isArray(msg.data)) {
             const loadedTasks = msg.data as Task[];
             setTasks(loadedTasks);
-            // タスク未選択のとき最新タスクを自動選択（チャット履歴を復元）。
-            // ただしユーザーが「新しいチャット」モードに入った場合は自動選択しない。
-            setActiveTaskId((prev) => {
-              if (prev === null && loadedTasks.length > 0 && !isNewChatModeRef.current) {
-                const latest = loadedTasks[0];
-                vscode?.postMessage({ command: 'loadChatHistory', taskId: latest.id });
-                return latest.id;
-              }
-              return prev;
-            });
           }
           break;
         case 'loadChatHistory':

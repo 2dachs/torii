@@ -1,0 +1,16 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const appDir = path.dirname(fileURLToPath(import.meta.url));
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  outputFileTracingRoot: appDir,
+  transpilePackages: ['@irori/core'],
+  experimental: {
+    externalDir: true,
+  },
+};
+
+export default nextConfig;

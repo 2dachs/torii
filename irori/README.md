@@ -28,7 +28,8 @@ The bundled app is created at `irori/src-tauri/target/release/bundle/macos/Irori
 - Cost is shown in both JPY and USD. The Usage panel also includes a monthly budget bar based on the configured JPY budget and exchange rate.
 - The UI is responsive: desktop keeps the navigation/chat/usage layout, while tablet and mobile prioritize the chat view with navigation in a drawer and usage details in a bottom sheet.
 - The app icon is Irori-specific: a Japanese dark-academia hearth mark based on fire, a dark sunken hearth frame, and subtle lattice lines without a bright outer frame.
-- The same Irori icon is used inside the app chrome, with compact macOS system typography and lighter panels/buttons so the chat content stays visually primary.
+- The same Irori icon is used inside the app chrome, with a darker Dark Academia palette, serif-forward typography, thinner gold borders, and restrained panel/button density so the chat content stays visually primary.
+- Assistant responses use a slightly lighter surfaced card so the boundary against the dark canvas stays readable; user messages stay on a warmer gold bubble with dark text.
 - Conversation titles are auto-generated from the first exchange. New conversations still start as `New chat`, then rename themselves after the first reply.
 - Projects and conversations can be renamed or deleted from the sidebar details area. Long lists collapse after the first 3 items.
 - Send failures now surface the underlying OpenRouter or Tauri error text instead of only the generic fallback.

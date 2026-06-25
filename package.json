@@ -2,7 +2,7 @@
   "name": "torii",
   "displayName": "Torii — AI Coding Agent for VS Code",
   "description": "Japanese-first AI coding agent with cost transparency, multi-provider support, and local LLM routing for privacy protection",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "publisher": "pettal",
   "icon": "resources/icon.png",
   "license": "MIT",
