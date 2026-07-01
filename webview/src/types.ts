@@ -225,7 +225,7 @@ export type AgentEvent =
   | { type: 'thinking_start'; iteration: number }
   | { type: 'text_delta'; text: string }
   | { type: 'tool_use'; id: string; tool: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; id: string; tool: string; ok: boolean; output: string }
+  | { type: 'tool_result'; id: string; tool: string; ok: boolean; output: string; outputTruncated?: boolean; outputOriginalLength?: number }
   | { type: 'approval_required'; id: string; tool: 'run_command'; data: { command: string } }
   | { type: 'approval_required'; id: string; tool: 'write_file'; data: { path: string; oldSize?: number; newSize?: number; diffPreviewSkipped?: boolean; diffPreviewSkippedReason?: string } }
   | { type: 'approval_required'; id: string; tool: string; data: Record<string, unknown> }

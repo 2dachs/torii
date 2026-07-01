@@ -176,6 +176,16 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-06-26
+- **0.6.2 Webviewストリーミング頻度によるRenderer応答停止対策**:
+  - **`src/webview/provider.ts`**: チャット/Agentのストリーミングdeltaを50ms単位でバッチ化し、Webviewへの `postMessage` 連打を抑制
+  - **`webview/src/App.tsx`**: `text_delta` など表示不要なAgentイベントを `agentSteps` に保存しないよう変更。表示ステップは最大80件に制限し、自動スクロールも `requestAnimationFrame` 経由に変更
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.2` へ更新
+
+- **0.6.1 Agentイベント巨大payloadによるRenderer応答停止対策**:
+  - **`src/backend/agentLoop.ts` / `src/backend/agentEventPayload.ts`**: `tool_use` の入力と `tool_result` の出力をWebview転送前に短縮。`read_file` の全文、`write_file` のcontent、`replace_in_file` のdiffなどがReact stateへ丸ごと積まれてVS Code Rendererが応答不能になる問題を修正
+  - **`src/backend/agentEventPayload.test.ts` / `package.json`**: Agentイベントpayload短縮のNodeテストと `test:agent-event-payload` を追加
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.1` へ更新
+
 - **0.6.0 大きな差分表示によるRenderer応答停止対策**:
   - **`src/backend/tools.ts` / `src/backend/diffPreviewPolicy.ts`**: `write_file` / `replace_in_file` の承認前差分表示にサイズ上限を追加。大きなファイル変更ではVS Codeの差分タブを開かず、承認イベントにも `oldContent` / `newContent` の本文を載せないよう変更
   - **`webview/src/App.tsx` / `webview/src/types.ts`**: 差分プレビューを省略した場合、承認カードに理由を表示するよう変更

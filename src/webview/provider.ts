@@ -79,6 +79,7 @@ import {
 } from '../constants';
 
 const MAX_EDITOR_CONTEXT_CHARS = 200_000;
+const WEBVIEW_DELTA_FLUSH_MS = 150;
 
 function getDocumentLength(doc: vscode.TextDocument): number {
   if (doc.lineCount === 0) return 0;
@@ -116,6 +117,10 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private _chatReq: ReturnType<typeof http.request> | null = null;
   private _agentReq: ReturnType<typeof http.request> | null = null;
   private _currentAgentTaskId: string | null = null;
+  private _chatDeltaBuffer = '';
+  private _chatDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  private _agentTextDeltaBuffer = '';
+  private _agentTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   // 設定書き込みをシリアル化するキュー（onBlur/onClick 競合によるレース防止）
   private _configWriteQueue: Promise<void> = Promise.resolve();
 
@@ -567,10 +572,12 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
             try {
               const event = JSON.parse(payload);
               if (event.type === 'delta' && event.text) {
-                this._view?.webview.postMessage({ command: 'chatDelta', text: event.text });
+                this._queueChatDelta(event.text);
               } else if (event.type === 'done' && event.data) {
+                this._flushChatDelta();
                 this._view?.webview.postMessage({ command: 'receiveMessage', data: event.data });
               } else if (event.type === 'error' && event.data) {
+                this._flushChatDelta();
                 const err = event.data as any;
                 this._view?.webview.postMessage({
                   command: 'error',
@@ -583,6 +590,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
           }
         });
         res.on('end', () => {
+          this._flushChatDelta();
           this._chatReq = null;
           updateBudgetDisplay(this._context);
         });
@@ -882,6 +890,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
         }
       });
       res.on('end', () => {
+        this._flushAgentTextDelta();
         this._agentReq = null;
         this._currentAgentTaskId = null;
         // SSE 終了後に予算表示を更新
@@ -890,6 +899,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     });
 
     this._agentReq.on('error', (e: Error) => {
+      this._flushAgentTextDelta();
       this._agentReq = null;
       this._currentAgentTaskId = null;
       if (e.message !== 'socket hang up') {
@@ -903,7 +913,46 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   /** SSEで受信したエージェントイベントをWebviewに転送 */
   private _handleAgentEvent(event: any) {
     if (!this._view) return;
+    if (event?.type === 'text_delta' && typeof event.text === 'string') {
+      this._queueAgentTextDelta(event.text);
+      return;
+    }
+    this._flushAgentTextDelta();
     this._view.webview.postMessage({ command: 'agentEvent', event });
+  }
+
+  private _queueChatDelta(text: string) {
+    this._chatDeltaBuffer += text;
+    if (this._chatDeltaTimer) return;
+    this._chatDeltaTimer = setTimeout(() => this._flushChatDelta(), WEBVIEW_DELTA_FLUSH_MS);
+  }
+
+  private _flushChatDelta() {
+    if (this._chatDeltaTimer) {
+      clearTimeout(this._chatDeltaTimer);
+      this._chatDeltaTimer = null;
+    }
+    if (!this._view || !this._chatDeltaBuffer) return;
+    const text = this._chatDeltaBuffer;
+    this._chatDeltaBuffer = '';
+    this._view.webview.postMessage({ command: 'chatDelta', text });
+  }
+
+  private _queueAgentTextDelta(text: string) {
+    this._agentTextDeltaBuffer += text;
+    if (this._agentTextDeltaTimer) return;
+    this._agentTextDeltaTimer = setTimeout(() => this._flushAgentTextDelta(), WEBVIEW_DELTA_FLUSH_MS);
+  }
+
+  private _flushAgentTextDelta() {
+    if (this._agentTextDeltaTimer) {
+      clearTimeout(this._agentTextDeltaTimer);
+      this._agentTextDeltaTimer = null;
+    }
+    if (!this._view || !this._agentTextDeltaBuffer) return;
+    const text = this._agentTextDeltaBuffer;
+    this._agentTextDeltaBuffer = '';
+    this._view.webview.postMessage({ command: 'agentEvent', event: { type: 'text_delta', text } });
   }
 
   /** エージェント承認応答をExpressサーバーに転送 */

@@ -164,6 +164,21 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ## 修正・変更ログ
 
+### 2026-07-01
+- **0.6.5 起動時クラッシュ修正**:
+  - **`webview/src/App.tsx`**: 起動時の `useEffect` から `activeTaskId` 依存を除去。初期化（`loadTasks`/`settingsConfig`/`licenseStatus`）は1回だけ実行し、チャット履歴読み込みはユーザーがタスクを選択した時のみ実行するよう分離。前回セッションの大きなチャット履歴が起動直後に自動ロードされてWebviewがフリーズする問題を修正
+  - **`package.json`**: バージョンを `0.6.5` へ更新
+  - **配布物**: `torii-0.6.5.vsix` を作成済み
+
+- **0.6.4 Webviewフリーズ根本修正**:
+  - **`webview/src/App.tsx`**: ストリーミング中はMarkdownパースをスキップしプレーンテキスト表示（`StreamingTextContent`）に切り替え。`done` イベント後に初めてMarkdownレンダリングを実行。O(n)×20回/秒の正規表現処理を排除
+  - **`webview/src/App.tsx`**: 自動スクロールをストリーミング中200msスロットルに変更。`scrollHeight` レイアウト再計算頻度を4分の1に低減
+  - **`webview/src/App.tsx`**: `contextTokenCount` の `useMemo` を分割し、`messages.reduce()` が `streamingText` 変更で再実行されないよう修正
+  - **`webview/src/App.tsx`**: エージェントステップの `file_change_undone` 検索を `useMemo` + `Set` で事前計算。O(n²) → O(n) に改善
+  - **`src/webview/provider.ts`**: `WEBVIEW_DELTA_FLUSH_MS` を 50ms → 150ms に変更。人の知覚上差がない範囲でレンダリング頻度を3分の1に低減
+  - **`package.json`**: バージョンを `0.6.4` へ更新
+  - **配布物**: `torii-0.6.4.vsix` を作成済み
+
 ### 2026-06-13
 - **バージョン 0.4.1 作成**:
   - **`webview/src/App.tsx` / `package.json`**: 設定画面の重複した「現在のモデル / メインモデル」を「使用モデル」に一本化し、サブモデル表記を「節約モデル」に変更。内部設定キーは互換性維持のため `main*` / `sub*` を継続利用

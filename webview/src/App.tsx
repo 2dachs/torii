@@ -6,6 +6,7 @@ import { buildBudgetMeterState } from './budget.js';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
+const MAX_AGENT_STEPS = 80;
 
 const TOOL_JAPANESE_NAMES: Record<string, string> = {
   read_file: 'ファイル読み込み中',
@@ -308,6 +309,16 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   return blocks;
 }
 
+function StreamingTextContent({ content, className = '' }: { content: string; className?: string }) {
+  return (
+    <div className={`markdown-content ${className}`.trim()}>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, fontFamily: 'inherit' }}>
+        {content}
+      </pre>
+    </div>
+  );
+}
+
 function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
   const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
 
@@ -434,12 +445,35 @@ function App() {
   const [modelIntent, setModelIntent] = useState<ModelIntent>('auto');
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [streamingText, setStreamingText] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState(false);
   const [agentSteps, setAgentSteps] = useState<AgentEvent[]>([]);
   const [agentPhase, setAgentPhase] = useState<'thinking' | 'executing' | 'waiting' | null>(null);
   const [currentToolName, setCurrentToolName] = useState<string | null>(null);
   const [currentToolInput, setCurrentToolInput] = useState<Record<string, unknown>>({});
   const [agentModelInfo, setAgentModelInfo] = useState<{ providerId: string; modelName: string; isLocal: boolean } | null>(null);
   const [privacyBanner, setPrivacyBanner] = useState<string | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const lastScrollTimeRef = useRef(0);
+
+  const undoneIdSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of agentSteps) {
+      if (e.type === 'file_change_undone') set.add(e.undoId);
+    }
+    return set;
+  }, [agentSteps]);
+
+  const recordAgentStep = useCallback((evt: AgentEvent) => {
+    if (
+      evt.type !== 'tool_use' &&
+      evt.type !== 'tool_result' &&
+      evt.type !== 'file_change_applied' &&
+      evt.type !== 'file_change_undone'
+    ) {
+      return;
+    }
+    setAgentSteps((prev) => [...prev.slice(-(MAX_AGENT_STEPS - 1)), evt]);
+  }, []);
   // スラッシュコマンドサジェスト
   const [showSlashSuggest, setShowSlashSuggest] = useState(false);
   const [slashSuggestQuery, setSlashSuggestQuery] = useState('');
@@ -629,6 +663,7 @@ function App() {
         case 'receiveMessage': {
           const res = msg.data as ApiResponse | undefined;
           if (res) {
+            setIsStreaming(false);
             setStreamingText('');
             const newMsg: ChatMessage = {
               id: Date.now().toString(),
@@ -691,6 +726,7 @@ function App() {
           break;
         }
         case 'error':
+          setIsStreaming(false);
           setStreamingText('');
           setMessages((prev) => [
             ...prev,
@@ -712,6 +748,7 @@ function App() {
         case 'requestCancelled':
           setLoading(false);
           setShowQuickSwitch(false);
+          setIsStreaming(false);
           setStreamingText('');
           setAgentPhase(null);
           setCurrentToolName(null);
@@ -719,6 +756,7 @@ function App() {
           break;
         case 'chatDelta':
           if ((msg as any).text) {
+            setIsStreaming(true);
             setStreamingText((prev) => prev + (msg as any).text);
           }
           break;
@@ -790,7 +828,7 @@ function App() {
         case 'agentEvent': {
           const evt = msg.event as AgentEvent;
           if (!evt) break;
-          setAgentSteps((prev) => [...prev, evt]);
+          recordAgentStep(evt);
           if (evt.type === 'task_created') {
             isNewChatModeRef.current = false;
             setActiveTaskId(evt.taskId);
@@ -800,6 +838,7 @@ function App() {
             setCurrentToolName(null);
           } else if (evt.type === 'text_delta') {
             setAgentPhase('thinking');
+            setIsStreaming(true);
             setStreamingText((prev) => prev + evt.text);
           } else if (evt.type === 'tool_use') {
             setAgentPhase('executing');
@@ -821,6 +860,7 @@ function App() {
             setPendingApprovals((prev) => [...prev, { id: evt.id, tool: evt.tool, data: evt.data as Record<string, unknown> }]);
           } else if (evt.type === 'done') {
             // done イベント: ストリーミングテキストを確定メッセージに変換
+            setIsStreaming(false);
             setStreamingText((currentText) => {
               const text = currentText || '(応答なし)';
               setMessages((prev) => [
@@ -877,6 +917,7 @@ function App() {
                 created_at: new Date().toISOString(),
               },
             ]);
+            setIsStreaming(false);
             setStreamingText('');
             setAgentSteps((prev) => prev.filter(e => e.type === 'file_change_applied' || e.type === 'file_change_undone'));
             setAgentPhase(null);
@@ -1002,21 +1043,61 @@ function App() {
     window.addEventListener('message', handler);
 
     vscode?.postMessage({ command: 'loadTasks' });
-    if (activeTaskId !== null) {
-      vscode?.postMessage({ command: 'loadChatHistory', taskId: activeTaskId });
-    }
     vscode?.postMessage({ command: 'settingsConfig' });
     vscode?.postMessage({ command: MSG_GET_LICENSE_STATUS });
 
     return () => window.removeEventListener('message', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordAgentStep]);
+
+  // ── タスク選択時にチャット履歴を読み込む（初回起動時は読み込まない） ──
+  const prevTaskIdRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevTaskIdRef.current === undefined) {
+      prevTaskIdRef.current = activeTaskId;
+      return;
+    }
+    prevTaskIdRef.current = activeTaskId;
+    if (activeTaskId !== null) {
+      vscode?.postMessage({ command: 'loadChatHistory', taskId: activeTaskId });
+    } else {
+      setMessages([]);
+    }
   }, [activeTaskId]);
 
-  // ── チャットの自動スクロール ──
+  // ── チャットの自動スクロール（ストリーミング中は200msスロットル） ──
   useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    if (isStreaming) {
+      const now = Date.now();
+      const elapsed = now - lastScrollTimeRef.current;
+      if (elapsed < 200) {
+        const timer = setTimeout(() => {
+          if (chatRef.current) {
+            chatRef.current.scrollTop = chatRef.current.scrollHeight;
+            lastScrollTimeRef.current = Date.now();
+          }
+        }, 200 - elapsed);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [messages, processingStatus, agentSteps, pendingApprovals]);
+
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      if (chatRef.current) {
+        chatRef.current.scrollTop = chatRef.current.scrollHeight;
+      }
+      lastScrollTimeRef.current = Date.now();
+      scrollFrameRef.current = null;
+    });
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  }, [messages, processingStatus, agentSteps.length, pendingApprovals.length, streamingText, isStreaming]);
 
   // ── メッセージ送信 ──
   const handleSend = useCallback(() => {
@@ -1082,6 +1163,7 @@ function App() {
     setInput('');
     setLoading(true);
     setShowQuickSwitch(false);
+    setIsStreaming(false);
     setStreamingText('');
     setAgentSteps([]);
     lastRequestRef.current = {
@@ -1278,6 +1360,7 @@ function App() {
     }
     setLoading(true);
     setShowQuickSwitch(false);
+    setIsStreaming(false);
     setStreamingText('');
     setAgentSteps([]);
     vscode?.postMessage({
@@ -1588,10 +1671,14 @@ function App() {
 
   // ── 予算バー計算 ──
   const budgetPercent = budgetMeter.budgetPercent;
-  const contextTokenCount = useMemo(() => {
-    const messageTokens = messages.reduce((sum, msg) => sum + estimateContextTokens(msg.content || ''), 0);
-    return messageTokens + estimateContextTokens(streamingText) + estimateContextTokens(input);
-  }, [messages, streamingText, input]);
+  const messageTokenSum = useMemo(() =>
+    messages.reduce((sum, msg) => sum + estimateContextTokens(msg.content || ''), 0),
+    [messages]
+  );
+  const contextTokenCount = useMemo(() =>
+    messageTokenSum + estimateContextTokens(streamingText) + estimateContextTokens(input),
+    [messageTokenSum, streamingText, input]
+  );
   const contextTokenLimit = getContextTokenLimit(effectiveModelId || serverConfig.model);
   const contextUsagePercent = contextTokenLimit > 0 ? (contextTokenCount / contextTokenLimit) * 100 : 0;
 
@@ -1980,17 +2067,17 @@ function App() {
                 );
               }
               if (evt.type === 'file_change_applied') {
-                const undoResult = agentSteps.find(e => e.type === 'file_change_undone' && e.undoId === evt.undoId);
+                const isUndone = undoneIdSet.has(evt.undoId);
                 return (
                   <div key={i} className="agent-step tool-result ok">
                     <span className="step-icon">↩</span>
                     <span className="step-label">{evt.path} を変更しました</span>
                     <button
                       className="inline-action-btn"
-                      disabled={!!undoResult}
+                      disabled={isUndone}
                       onClick={() => handleUndoFileChange(evt.undoId)}
                     >
-                      {undoResult ? '元に戻し済み' : '元に戻す'}
+                      {isUndone ? '元に戻し済み' : '元に戻す'}
                     </button>
                   </div>
                 );
@@ -2007,7 +2094,10 @@ function App() {
             })}
             {streamingText && (
               <div className="agent-streaming-text">
-                <MarkdownContent content={streamingText} className="message-markdown" />
+                {isStreaming
+                  ? <StreamingTextContent content={streamingText} className="message-markdown" />
+                  : <MarkdownContent content={streamingText} className="message-markdown" />
+                }
               </div>
             )}
             {!streamingText && !agentPhase && (
@@ -2034,7 +2124,10 @@ function App() {
             </div>
             {streamingText && (
               <div className="chat-streaming-preview">
-                <MarkdownContent content={streamingText} className="message-markdown" />
+                {isStreaming
+                  ? <StreamingTextContent content={streamingText} className="message-markdown" />
+                  : <MarkdownContent content={streamingText} className="message-markdown" />
+                }
               </div>
             )}
           </div>
