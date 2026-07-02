@@ -178,6 +178,14 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-02
+- **0.7.0 過去チャット履歴でWebviewが即クラッシュする問題の根本修正**:
+  - **根本原因**: `App.tsx` の `renderInlineMarkdown` トークナイザで、テキストが `[` `_` `*` `` ` `` で始まるのにマークダウントークンとして成立しない場合（例: `[REMINDER: ...]`（`tools.ts` が付加するリマインダー文）、`[📷 1枚の画像 → ...]`、奇数個の `_`）、`rest.search()` が位置0を返して `chunk` が空文字になり `index` が進まず **while が無限ループ**。実際の保存済み履歴250メッセージ中23件が該当し、履歴を開いた瞬間の一括Markdownレンダリングでレンダラーが停止していた。新規チャットで動いていたのはストリーミング中がプレーンテキスト表示だったため
+  - **`webview/src/inlineMarkdown.ts`**: インライントークナイザを純関数 `tokenizeInlineMarkdown` として切り出し。トークン不成立時も必ず1文字以上前進する走査に修正（無限ループを構造的に排除）
+  - **`webview/src/App.tsx`**: `renderInlineMarkdown` をトークナイザ結果のJSXマッピングのみに変更
+  - **`webview/src/inlineMarkdown.test.ts` / `package.json`**: 実際にハングしていた履歴パターンを含む回帰テストを追加し `npm test` に組み込み。修正後トークナイザで全250メッセージが10msで処理完了することを実データで検証済み
+  - **`package.json` / `package-lock.json`**: 修正版として `0.7.0` へ更新
+
+### 2026-07-02
 - **0.6.14 メッセージ描画ホットパス削減**:
   - **`webview/src/App.tsx`**: チャット履歴の1メッセージ表示を `MessageItem` に切り出して `React.memo` 化。ストリーミングdeltaやAgentイベント更新のたびに過去メッセージ全体のMarkdown/ファイルパス処理が再実行される経路を削減
   - **`webview/src/App.tsx`**: `MarkdownContent` を `React.memo` 化し、既存メッセージ本文が変わらない限り `parseMarkdownBlocks` / `renderInlineMarkdown` を再実行しないよう変更

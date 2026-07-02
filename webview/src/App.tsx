@@ -7,6 +7,7 @@ import { getVisibleOpenRouterModels } from './openRouterCatalog';
 import { shouldRequestTasksOnToggle } from './taskLoading';
 import { appendVisibleAgentSteps, summarizeToolInputForUi } from './agentProgress';
 import { extractMessageFilePaths } from './messageFilePaths';
+import { tokenizeInlineMarkdown } from './inlineMarkdown';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -146,76 +147,25 @@ type OpenRouterCatalogModel = {
 };
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let index = 0;
-  let key = 0;
-
-  const pushText = (value: string) => {
-    if (value) nodes.push(value);
-  };
-
-  while (index < text.length) {
-    const rest = text.slice(index);
-    const match = rest.match(
-      /^(https?:\/\/[^\s<]+|`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/
-    );
-    if (!match) {
-      const next = rest.search(/https?:\/\/|`|\*\*|__|\*|_|\[/);
-      const chunk = next === -1 ? rest : rest.slice(0, next);
-      pushText(chunk);
-      index += chunk.length;
-      continue;
+  return tokenizeInlineMarkdown(text).map((token, i) => {
+    const key = `${keyPrefix}-${token.type}-${i}`;
+    switch (token.type) {
+      case 'link':
+        return (
+          <a key={key} href={token.href} target="_blank" rel="noreferrer">
+            {token.label}
+          </a>
+        );
+      case 'code':
+        return <code key={key}>{token.text}</code>;
+      case 'strong':
+        return <strong key={key}>{token.text}</strong>;
+      case 'em':
+        return <em key={key}>{token.text}</em>;
+      default:
+        return token.text;
     }
-
-    const token = match[1];
-    index += token.length;
-
-    if (token.startsWith('http://') || token.startsWith('https://')) {
-      nodes.push(
-        <a key={`${keyPrefix}-link-${key++}`} href={token} target="_blank" rel="noreferrer">
-          {token}
-        </a>
-      );
-      continue;
-    }
-
-    if (token.startsWith('`') && token.endsWith('`')) {
-      nodes.push(<code key={`${keyPrefix}-code-${key++}`}>{token.slice(1, -1)}</code>);
-      continue;
-    }
-
-    if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) {
-      nodes.push(
-        <strong key={`${keyPrefix}-strong-${key++}`}>
-          {token.slice(2, -2)}
-        </strong>
-      );
-      continue;
-    }
-
-    if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) {
-      nodes.push(
-        <em key={`${keyPrefix}-em-${key++}`}>
-          {token.slice(1, -1)}
-        </em>
-      );
-      continue;
-    }
-
-    const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (linkMatch) {
-      nodes.push(
-        <a key={`${keyPrefix}-href-${key++}`} href={linkMatch[2]} target="_blank" rel="noreferrer">
-          {linkMatch[1]}
-        </a>
-      );
-      continue;
-    }
-
-    pushText(token);
-  }
-
-  return nodes;
+  });
 }
 
 function parseMarkdownBlocks(content: string): MarkdownBlock[] {
