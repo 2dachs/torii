@@ -53,7 +53,7 @@
 
 ### 課金インフラ: LemonSqueezy + ライセンスキー
 - LemonSqueezyは日本向け消費税（JCT）を自動処理
-- ライセンスキーを発行し、拡張機能が起動時に `api.lemonsqueezy.com/v1/licenses/validate` で検証
+- ライセンスキーを発行し、Torii本体を手動起動した時に `api.lemonsqueezy.com/v1/licenses/validate` で検証
 - 機体識別子: `vscode.env.machineId`（1ライセンス = 2デバイスまで許可予定）
 - オフライン猶予期間: 最後の認証成功から7日間はキャッシュで動作
 
@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.5.6）
+## 3. 現在の実装状態（v0.6.12）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
@@ -98,6 +98,10 @@
 - **Webviewファイル保存**: 保存前に差分確認モーダルを表示し、ユーザーが適用を選んだ場合のみ書き込む
 - **エディタ添付の巨大ファイル対策**: アクティブエディタ本文・選択範囲のWebview転送を最大20万文字に制限
 - **プロジェクト起動時の安定化**: Webview初期化時は全履歴・エディタ本文を自動送信せず、必要時のみ取得
+- **Safe Shell起動**: VS Code起動時・Toriiビュー復元時はReact Webview / storage / Express server / license check / task loadを開始せず、静的HTMLの「Toriiを起動」押下後だけ本体を初期化する
+- **React UI初期化の単一起点化**: 通常UI表示後はReact側の `webviewReady` を受けてからProviderが1回だけ初期データを送信し、起動直後の重複 `loadTasks` / `settingsConfig` / `licenseStatus` を発生させない
+- **タスク履歴読み込みの完全遅延化**: 起動直後は `getTasks()` を呼ばず、ユーザーがタスクリストを開くか「最近のチャットを読み込む」を押した時だけタスク一覧を取得する。Webviewへ送るタスクpayloadは最大20件・必要フィールドのみに制限
+- **OpenRouterモデル一覧の安定化**: 設定画面ではOpenRouterモデル一覧のWebview転送payloadを必要フィールド・最大300件へ制限し、候補DOM描画も最大12件に抑える
 - **ビルド成果物の長行対策**: esbuild出力の行長を制限し、生成JSを開いてもVS Codeが固まりにくいように改善
 - **Webview CSP対策**: VS Code内部のlocalhostアセット配信を許可し、Webview起動ログで診断可能に改善
 - **履歴クリア確認**: 全履歴削除の前に確認ダイアログを表示

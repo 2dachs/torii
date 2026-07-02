@@ -2688,13 +2688,6 @@ details[open] .settings-advanced-summary::before {
   50% { opacity: 0.45; }
 }
 
-@keyframes thinking-dots-anim {
-  0%   { content: ''; }
-  25%  { content: '.'; }
-  50%  { content: '..'; }
-  75%  { content: '...'; }
-}
-
 .agent-phase-bar {
   display: flex;
   align-items: center;
@@ -2717,8 +2710,8 @@ details[open] .settings-advanced-summary::before {
 }
 
 @keyframes executing-pulse {
-  0%, 100% { opacity: 1; border-left-width: 3px; }
-  50% { opacity: 0.7; border-left-width: 5px; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 /* カテゴリ別ボーダーカラー */
@@ -2745,19 +2738,25 @@ details[open] .settings-advanced-summary::before {
 }
 
 @keyframes waiting-pulse {
-  0%, 100% { opacity: 1; border-left-width: 3px; }
-  50% { opacity: 0.35; border-left-width: 6px; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
-.thinking-dots::after {
-  content: '';
-  animation: thinking-dots-anim 1.2s steps(4, end) infinite;
+/* ── ドットアニメーション: opacityのみ（contentはレイアウト再計算を引き起こすため廃止） ── */
+@keyframes dot-fade {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
 }
 
-.waiting-dots::after {
-  content: '';
-  animation: thinking-dots-anim 1s steps(4, end) infinite;
+.thinking-dots .dot,
+.waiting-dots .dot {
+  opacity: 0;
+  animation: dot-fade 1.4s ease-in-out infinite;
 }
+.thinking-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+.waiting-dots .dot:nth-child(2) { animation-delay: 0.18s; }
+.waiting-dots .dot:nth-child(3) { animation-delay: 0.36s; }
 
 .phase-label {
   font-weight: 600;

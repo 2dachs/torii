@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, ModelIntent, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
-import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_GET_LICENSE_STATUS, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
+import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
 import { buildBudgetMeterState } from './budget.js';
+import { getVisibleOpenRouterModels } from './openRouterCatalog';
+import { shouldRequestTasksOnToggle } from './taskLoading';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -425,6 +427,8 @@ const DEFAULT_CONFIG: ServerConfig = {
 function App() {
   const [title, setTitle] = useState('Torii');
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -625,6 +629,11 @@ function App() {
     vscode?.postMessage({ command: 'settingsConfig' });
   }, [dismissOnboarding]);
 
+  const requestTasks = useCallback(() => {
+    setTasksLoading(true);
+    vscode?.postMessage({ command: 'loadTasks' });
+  }, []);
+
   // ── Extension Host からのメッセージ受信 ──
   useEffect(() => {
     const handler = (event: MessageEvent<VsCodeMessage>) => {
@@ -656,6 +665,8 @@ function App() {
             const loadedTasks = msg.data as Task[];
             setTasks(loadedTasks);
           }
+          setTasksLoaded(true);
+          setTasksLoading(false);
           break;
         case 'loadChatHistory':
           if (Array.isArray(msg.data)) setMessages(msg.data as ChatMessage[]);
@@ -718,7 +729,7 @@ function App() {
             if (res.autoCreatedTaskId) {
               isNewChatModeRef.current = false;
               setActiveTaskId(res.autoCreatedTaskId);
-              vscode?.postMessage({ command: 'loadTasks' });
+              requestTasks();
             }
           }
           setLoading(false);
@@ -823,7 +834,7 @@ function App() {
           break;
         case 'createTask':
           // タスク作成後にタスク一覧を再取得
-          vscode?.postMessage({ command: 'loadTasks' });
+          requestTasks();
           break;
         case 'agentEvent': {
           const evt = msg.event as AgentEvent;
@@ -832,7 +843,7 @@ function App() {
           if (evt.type === 'task_created') {
             isNewChatModeRef.current = false;
             setActiveTaskId(evt.taskId);
-            vscode?.postMessage({ command: 'loadTasks' });
+            requestTasks();
           } else if (evt.type === 'thinking_start') {
             setAgentPhase('thinking');
             setCurrentToolName(null);
@@ -888,7 +899,7 @@ function App() {
             setLoading(false);
             // タスクリストを更新（自動作成されたタスクを反映）
             isNewChatModeRef.current = false;
-            vscode?.postMessage({ command: 'loadTasks' });
+            requestTasks();
             // 予算更新（数値stateと表示文字列を両方更新）
             if (evt.costUsd > 0) {
               const rate = serverConfig.exchangeRate || 150;
@@ -1042,13 +1053,11 @@ function App() {
 
     window.addEventListener('message', handler);
 
-    vscode?.postMessage({ command: 'loadTasks' });
-    vscode?.postMessage({ command: 'settingsConfig' });
-    vscode?.postMessage({ command: MSG_GET_LICENSE_STATUS });
+    vscode?.postMessage({ command: 'webviewReady' });
 
     return () => window.removeEventListener('message', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordAgentStep]);
+  }, [recordAgentStep, requestTasks]);
 
   // ── タスク選択時にチャット履歴を読み込む（初回起動時は読み込まない） ──
   const prevTaskIdRef = useRef<string | null | undefined>(undefined);
@@ -1064,6 +1073,19 @@ function App() {
       setMessages([]);
     }
   }, [activeTaskId]);
+
+  // ── loading/agentPhase スタック安全タイムアウト（5分） ──
+  // SSEが途中切断されdoneイベントが届かなかった場合にアニメーションが永遠に動き続けるのを防ぐ
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => {
+      setLoading(false);
+      setIsStreaming(false);
+      setStreamingText('');
+      setAgentPhase(null);
+    }, 5 * 60 * 1000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // ── チャットの自動スクロール（ストリーミング中は200msスロットル） ──
   useEffect(() => {
@@ -1222,6 +1244,21 @@ function App() {
     setActiveTaskId(taskId);
     vscode?.postMessage({ command: 'loadChatHistory', taskId });
   }, []);
+
+  const handleToggleTaskList = useCallback(() => {
+    setTaskListExpanded((current) => {
+      const next = !current;
+      if (shouldRequestTasksOnToggle(next, tasksLoaded, tasksLoading)) {
+        requestTasks();
+      }
+      return next;
+    });
+  }, [requestTasks, tasksLoaded, tasksLoading]);
+
+  const handleLoadRecentTasks = useCallback(() => {
+    requestTasks();
+    setTaskListExpanded(true);
+  }, [requestTasks]);
 
   // ── 設定を開く → 最新設定を再取得 + 各プロバイダーのAPIキーを取得 ──
   const handleOpenSettings = useCallback(() => {
@@ -1638,11 +1675,7 @@ function App() {
     return tasks.filter((task) => task.title.toLowerCase().includes(query));
   }, [tasks, taskSearchQuery]);
   const filteredOpenRouterModels = useMemo(() => {
-    const query = openRouterModelQuery.trim().toLowerCase();
-    const models = query
-      ? openRouterModels.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(query))
-      : openRouterModels;
-    return models.slice(0, 12);
+    return getVisibleOpenRouterModels(openRouterModels, openRouterModelQuery);
   }, [openRouterModels, openRouterModelQuery]);
 
   // 全プロバイダー×モデルの結合オプション（節約モデル選択用）
@@ -1704,7 +1737,7 @@ function App() {
       <div className={`task-list${taskListExpanded ? ' expanded' : ''}`}>
         <div
           className="task-list-header"
-          onClick={() => setTaskListExpanded(v => !v)}
+          onClick={handleToggleTaskList}
           style={{ cursor: 'pointer' }}
           title={taskListExpanded ? 'タスクリストを折りたたむ' : 'タスクリストを展開'}
         >
@@ -1745,7 +1778,9 @@ function App() {
                 </button>
               )}
             </div>
-            {tasks.length === 0 ? (
+            {tasksLoading ? (
+              <div className="task-empty">タスクを読み込んでいます</div>
+            ) : tasks.length === 0 ? (
               <div className="task-empty">「＋」を押してチャットを開始してください</div>
             ) : filteredTasks.length === 0 ? (
               <div className="task-empty">検索結果がありません</div>
@@ -1847,11 +1882,15 @@ function App() {
                     ))}
                   </div>
                   {tasks.length > 5 && (
-                    <button className="home-more-btn" onClick={() => setTaskListExpanded(true)}>
+                    <button className="home-more-btn" onClick={handleToggleTaskList}>
                       他のタスクを見る（{tasks.length - 5}件）
                     </button>
                   )}
                 </>
+              ) : !tasksLoaded ? (
+                <button className="home-more-btn" onClick={handleLoadRecentTasks} disabled={tasksLoading}>
+                  {tasksLoading ? '読み込み中' : '最近のチャットを読み込む'}
+                </button>
               ) : (
                 <div className="home-empty-hint">下の入力欄からメッセージを送ってチャットを始めましょう</div>
               )}
@@ -2027,13 +2066,13 @@ function App() {
                   agentPhase === 'executing' ? ` executing cat-${effCat}` :
                   agentPhase === 'waiting' ? ' waiting' : ''
                 }`}>
-                  {agentPhase === 'thinking' && <span className="phase-label thinking">🤔 考え中<span className="thinking-dots"></span></span>}
+                  {agentPhase === 'thinking' && <span className="phase-label thinking">🤔 考え中<span className="thinking-dots"><span className="dot">.</span><span className="dot">.</span><span className="dot">.</span></span></span>}
                   {agentPhase === 'executing' && (
                     <span className={`phase-label cat-${effCat}`}>
-                      {toolIcon} {toolLabel}<span className="thinking-dots"></span>
+                      {toolIcon} {toolLabel}<span className="thinking-dots"><span className="dot">.</span><span className="dot">.</span><span className="dot">.</span></span>
                     </span>
                   )}
-                  {agentPhase === 'waiting' && <span className="phase-label waiting">⏳ 承認を待っています<span className="waiting-dots"></span></span>}
+                  {agentPhase === 'waiting' && <span className="phase-label waiting">⏳ 承認を待っています<span className="waiting-dots"><span className="dot">.</span><span className="dot">.</span><span className="dot">.</span></span></span>}
                   {agentModelInfo && (
                     <span className={`agent-model-badge ${agentModelInfo.isLocal ? 'local' : 'cloud'}`}>
                       {agentModelInfo.isLocal ? '🏠 ローカル（無料）' : `☁️ ${agentModelInfo.modelName}`}
@@ -2111,7 +2150,7 @@ function App() {
         {loading && agentMode === 'chat' && (
           <div className="loading-area">
             <div className="agent-phase-bar thinking">
-              <span className="phase-label thinking">🤔 考え中<span className="thinking-dots"></span></span>
+              <span className="phase-label thinking">🤔 考え中<span className="thinking-dots"><span className="dot">.</span><span className="dot">.</span><span className="dot">.</span></span></span>
               {processingStatus && (
                 <span className="chat-loading-badge">
                   <span className="badge-provider">{processingStatus.providerName}</span>

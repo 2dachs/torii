@@ -134,6 +134,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - タスク管理: JSON永続化、チャット履歴の複数タスク管理
+- Safe Shell起動: VS Code起動時・Toriiビュー復元時は静的HTMLのみを表示し、ユーザーが「Toriiを起動」を押すまでReact Webview / storage / Express server / license check / task loadを開始しない
 - コマンドガード: 危険なコマンドパターンをブロック
 - 画像添付対応（マルチモーダルモデル + Gemini自動橋渡し）
 - エディタ内容の添付（現在ファイルをコンテキストに追加）
@@ -154,7 +155,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 | 項目 | 状態 | 詳細 |
 |------|------|------|
-| ライセンス認証 | **実装済み** | `licenseManager.ts` にてLemonSqueezy連携（activate/validate）・trial/valid/grace/expired分岐・24hキャッシュ・7日間オフライン猶予を実装済み。`extension.ts` で起動時に `initFreeTrial` / `check` を呼び出し |
+| ライセンス認証 | **実装済み** | `licenseManager.ts` にてLemonSqueezy連携（activate/validate）・trial/valid/grace/expired分岐・24hキャッシュ・7日間オフライン猶予を実装済み。0.6.9以降はSafe ShellからTorii本体を手動起動した時だけ `initFreeTrial` / `check` を呼び出し |
 | Expressセキュリティ | **修正済み** | `server.ts` で `127.0.0.1` にバインド（`server.listen(port, '127.0.0.1', ...)`）済み。外部アクセス不可 |
 | コンテキストウィンドウ管理 | **実装済み** | `agentLoop.ts` に `getTokenLimit` / `estimateTokens` / `WARNING_THRESHOLD` を実装。上限の80%超で `context_warning` イベント送出、超過時は古いメッセージを自動削除 |
 | `token` キーワード誤検知 | **対処済み** | `router.ts` に除外ワードリストを実装。除外ワードが含まれる場合はプライバシールーティングをスキップする仕組みを追加済み |
@@ -163,6 +164,42 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ---
 
 ## 修正・変更ログ
+
+### 2026-07-02
+- **0.6.12 タスク履歴読み込みの完全遅延化**:
+  - **`src/webview/provider.ts`**: 通常React UI初期化時の初期データからタスク一覧送信を除外。`loadTasks` 明示要求時だけ `getTasks()` を実行するよう変更
+  - **`src/webview/taskPayload.ts` / `src/webview/provider.ts`**: Webviewへ送るタスク一覧を最大20件・title最大120文字へ制限し、必要フィールドだけに正規化。古い/壊れたentryや想定外フィールドをWebview stateへ載せない
+  - **`webview/src/taskLoading.ts` / `webview/src/App.tsx`**: タスク一覧は起動直後に読まず、タスクリスト展開または「最近のチャットを読み込む」押下時だけ要求する方式へ変更
+  - **`src/webview/taskPayload.test.ts` / `webview/src/taskLoading.test.ts` / `package.json`**: タスクpayload制限と遅延読み込み判定のNodeテストを追加
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.12` へ更新
+
+- **0.6.11 通常React UI初期化によるRenderer応答停止対策**:
+  - **`webview/src/App.tsx` / `src/webview/provider.ts`**: React起動直後の `loadTasks` / `settingsConfig` / `licenseStatus` 自動要求を廃止し、React側が `webviewReady` を送った後にProvider側から1回だけ初期データを送るハンドシェイク方式へ変更。Provider側との二重初期化によるWebview state更新を防止
+  - **`src/webview/initialDataGate.ts`**: 通常UIへ差し替えた後の初期データ送信を1回に制限するゲートを追加
+  - **`src/backend/server.ts`**: Torii本体起動時のOpenRouter価格APIバックグラウンド取得を廃止し、OpenRouterチャット実行後のキャッシュ更新に遅延。チャット画面表示だけでネットワーク/プロキシ処理を走らせないよう変更
+  - **`src/webview/initialDataGate.test.ts` / `package.json`**: 初期データ送信ゲートのNodeテストを追加
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.11` へ更新
+
+- **0.6.10 設定画面のOpenRouterモデル一覧によるRenderer応答停止対策**:
+  - **`src/webview/openRouterModelPayload.ts` / `src/webview/provider.ts`**: OpenRouterモデル一覧をWebviewへ送る前に、必要フィールドだけへ圧縮し最大300件に制限。説明文など巨大フィールドをpostMessageに載せないよう変更
+  - **`webview/src/openRouterCatalog.ts` / `webview/src/App.tsx`**: 設定画面のOpenRouter候補表示をヘルパー化し、検索結果の描画数を最大12件に固定
+  - **`src/webview/openRouterModelPayload.test.ts` / `webview/src/openRouterCatalog.test.ts` / `package.json`**: payload圧縮と表示件数制限のNodeテストを追加
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.10` へ更新
+
+### 2026-07-01
+- **0.6.9 Safe Shell起動によるVS Code起動直後クラッシュ回避**:
+  - **`src/extension.ts`**: `activate()` ではWebviewProviderとコマンド登録だけを行い、`initStorage()` / `startServer()` / `registerStatusBar()` / `licenseManager.check()` を起動時に呼ばないよう変更。`ensureToriiStarted()` を追加し、ユーザー操作後の初回だけ単一Promiseで本体初期化する
+  - **`src/webview/provider.ts` / `src/webview/safeShell.ts`**: Toriiビュー復元時はReact bundleを読み込まず、インライン静的HTMLのSafe Shellだけを表示。「Toriiを起動」押下後に通常React UIへ差し替え、server/settings/tasks/licenseを送信する
+  - **`src/backend/resetLocalData.ts`**: `torii.resetLocalData` コマンドを追加。確認後にglobal/workspace storageを削除せず、timestamp付き `.backup-*` へ退避する復旧手段を実装
+  - **`src/webview/safeShell.test.ts` / `src/backend/resetLocalData.test.ts` / `package.json`**: Safe Shellとローカルデータ退避のNodeテストを追加し、`npm test` に組み込み
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.9` へ更新。0.6.8配布後の再生成版
+
+- **0.6.6 CPU 99%張り付きによるフリーズ根本修正**:
+  - **根本原因**: `webview/src/styles.css` の `.agent-phase-bar.executing` / `.agent-phase-bar.waiting` に付与していた `executing-pulse` / `waiting-pulse` アニメーションが `border-left-width` を無限ループでアニメーションしており、ブラウザが毎フレーム（約60fps）レイアウト再計算を強制されていた。エージェント状態（`agentPhase`）が `executing` / `waiting` のまま何らかの理由で解除されずに残ると、無操作でも延々とレイアウト計算が走り続けCPUを専有し、VS Code全体が応答不能になっていた
+  - **診断経緯**: Process Explorerでレンダラープロセスが無操作でもCPU 99%に張り付いていることを確認 → macOSの`sample`コマンドでスタックトレースを取得しV8 JS実行が続いていることを確認 → スタイルシートの無限アニメーションを特定
+  - **`webview/src/styles.css`**: `executing-pulse` / `waiting-pulse` の `border-left-width` アニメーションを削除し、`thinking-pulse` と同様に `opacity` のみをアニメーションするよう変更。レイアウトに影響しないプロパティのみになったため、状態が仮に残留してもCPU負荷は発生しない
+  - **`package.json`**: バージョンを `0.6.6` へ更新
+  - **配布物**: `torii-0.6.6.vsix` を作成済み
 
 ### 2026-07-01
 - **0.6.5 起動時クラッシュ修正**:

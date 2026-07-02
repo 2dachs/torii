@@ -868,7 +868,6 @@ export async function startServer(context: vscode.ExtensionContext): Promise<{ p
 
   app = express();
   app.use(express.json({ limit: '30mb' })); // 画像 base64 (最大 10MB → ~13MB) を考慮したサイズ上限
-  void refreshOpenRouterPricingCache();
 
   // セキュリティ: X-Torii-Token ヘッダーによる認証
   // 起動時に生成したランダムトークンを知っているのは Extension Host のみ
@@ -1225,6 +1224,10 @@ ${chatTree}${chatEditorSection}
           modelName: effectiveModelDef?.name || effectiveModel,
         }, 500);
         return;
+      }
+
+      if (routeResult.providerId === 'openrouter') {
+        void refreshOpenRouterPricingCache();
       }
 
       // コスト計算

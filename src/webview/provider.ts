@@ -10,6 +10,10 @@ import { executeInTerminal } from '../backend/terminalBridge';
 import { getCurrentWorkspaceId } from '../backend/workspace';
 import * as licenseManager from '../backend/licenseManager';
 import { updateLicenseBadge } from '../backend/statusBar';
+import { buildSafeShellHtml } from './safeShell';
+import { sanitizeOpenRouterModelsForWebview } from './openRouterModelPayload';
+import { InitialDataGate } from './initialDataGate';
+import { sanitizeTasksForWebview } from './taskPayload';
 import {
   EXTENSION_DISPLAY_NAME,
   MSG_LOAD_TASKS,
@@ -81,6 +85,13 @@ import {
 const MAX_EDITOR_CONTEXT_CHARS = 200_000;
 const WEBVIEW_DELTA_FLUSH_MS = 150;
 
+export interface ToriiRuntime {
+  port: number;
+  token: string;
+}
+
+type EnsureToriiStarted = () => Promise<ToriiRuntime>;
+
 function getDocumentLength(doc: vscode.TextDocument): number {
   if (doc.lineCount === 0) return 0;
 
@@ -112,8 +123,9 @@ function getSelectionLength(doc: vscode.TextDocument, selection: vscode.Selectio
 export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _context: vscode.ExtensionContext;
-  private _port: number;
-  private _token: string;
+  private _ensureToriiStarted: EnsureToriiStarted;
+  private _port = 0;
+  private _token = '';
   private _chatReq: ReturnType<typeof http.request> | null = null;
   private _agentReq: ReturnType<typeof http.request> | null = null;
   private _currentAgentTaskId: string | null = null;
@@ -121,13 +133,13 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private _chatDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   private _agentTextDeltaBuffer = '';
   private _agentTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  private _initialDataGate = new InitialDataGate();
   // 設定書き込みをシリアル化するキュー（onBlur/onClick 競合によるレース防止）
   private _configWriteQueue: Promise<void> = Promise.resolve();
 
-  constructor(context: vscode.ExtensionContext, port: number, token: string) {
+  constructor(context: vscode.ExtensionContext, ensureToriiStarted: EnsureToriiStarted) {
     this._context = context;
-    this._port = port;
-    this._token = token;
+    this._ensureToriiStarted = ensureToriiStarted;
   }
 
   public resolveWebviewView(
@@ -144,7 +156,8 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       ],
     };
 
-    webviewView.webview.html = this._getHtmlContent(webviewView.webview);
+    webviewView.webview.html = buildSafeShellHtml();
+    this._initialDataGate.reset();
 
     const disposables: vscode.Disposable[] = [];
 
@@ -159,8 +172,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       disposables.forEach(d => d.dispose());
     });
 
-    // 初期データ送信
-    this._sendInitialData();
+    // 起動直後はReact本体・storage・serverを起動しない。
   }
 
   private _getHtmlContent(webview: vscode.Webview): string {
@@ -206,6 +218,21 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   private async _handleMessage(message: any) {
+    if (message.command === 'bootTorii') {
+      await this._bootTorii();
+      return;
+    }
+
+    if (message.command === 'webviewReady') {
+      await this._sendInitialData();
+      return;
+    }
+
+    if (!this._isBackendReady() && this._requiresBackend(message.command)) {
+      const ok = await this._bootTorii();
+      if (!ok) return;
+    }
+
     switch (message.command) {
       case MSG_SEND_MESSAGE:
         if (message.agentMode === 'agent') {
@@ -321,8 +348,59 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private _isBackendReady(): boolean {
+    return typeof this._port === 'number' && typeof this._token === 'string' && this._token.length > 0;
+  }
+
+  private _requiresBackend(command: string): boolean {
+    return [
+      MSG_SEND_MESSAGE,
+      MSG_AGENT_APPROVE,
+      MSG_UNDO_FILE_CHANGE,
+      MSG_LOAD_ROUTING_RULES,
+      MSG_SAVE_ROUTING_RULE,
+      MSG_DELETE_ROUTING_RULE,
+      MSG_LOAD_PETTAL_CONFIG,
+      MSG_SAVE_PETTAL_CONFIG,
+      MSG_GET_MODEL_USAGE,
+      MSG_ESCALATE,
+      MSG_CANCEL_AGENT,
+    ].includes(command);
+  }
+
+  private async _bootTorii(): Promise<boolean> {
+    if (!this._view) return false;
+
+    if (this._isBackendReady()) {
+      this._initialDataGate.reset();
+      this._view.webview.html = this._getHtmlContent(this._view.webview);
+      return true;
+    }
+
+    this._initialDataGate.reset();
+    this._view.webview.html = buildSafeShellHtml({ status: 'Torii本体を初期化しています。' });
+    try {
+      const runtime = await this._ensureToriiStarted();
+      this._port = runtime.port;
+      this._token = runtime.token;
+      if (!this._view) return false;
+      this._initialDataGate.reset();
+      this._view.webview.html = this._getHtmlContent(this._view.webview);
+      return true;
+    } catch (err: any) {
+      console.error('[Torii] Failed to boot from Safe Shell:', err);
+      if (this._view) {
+        this._view.webview.html = buildSafeShellHtml({
+          error: err?.message || String(err) || 'Toriiの起動に失敗しました',
+        });
+      }
+      return false;
+    }
+  }
+
   private async _sendInitialData() {
-    if (!this._view) return;
+    if (!this._view || !this._isBackendReady()) return;
+    if (!this._initialDataGate.shouldSend()) return;
     // サーバーポートを通知
     this._view.webview.postMessage({
       command: MSG_SERVER_PORT,
@@ -333,8 +411,6 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       command: 'extensionName',
       name: EXTENSION_DISPLAY_NAME,
     });
-    // タスク一覧を送信
-    await this._sendTasks();
     // VS Code 設定を転送
     await this._sendSettingsConfig();
     // ライセンスステータスを送信
@@ -490,7 +566,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     const tasks = await getTasks(workspaceId);
     this._view.webview.postMessage({
       command: MSG_LOAD_TASKS,
-      data: tasks,
+      data: sanitizeTasksForWebview(tasks),
     });
   }
 
@@ -511,7 +587,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       if (!response.ok) {
         throw new Error(`OpenRouter API error: ${response.status}`);
       }
-      const data = await response.json();
+      const data = sanitizeOpenRouterModelsForWebview(await response.json());
       this._view.webview.postMessage({ command: 'openRouterModels', data });
     } catch (err: any) {
       this._view.webview.postMessage({
@@ -1319,6 +1395,16 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     this._view.webview.postMessage({ command: MSG_LICENSE_STATUS, status, trialDaysRemaining, isBeta: licenseManager.BETA_FREE_PRO });
   }
 
+  public showSafeShell(status?: string) {
+    this._port = 0;
+    this._token = '';
+    this._initialDataGate.reset();
+    this._view?.webview.postMessage({ command: 'requestCancelled' });
+    if (this._view) {
+      this._view.webview.html = buildSafeShellHtml({ status });
+    }
+  }
+
   private async _handleGetLicenseStatus() {
     try {
       const status = await licenseManager.getStatus(this._context);
@@ -1344,6 +1430,13 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   public dispose() {
+    this._chatReq?.destroy();
+    this._agentReq?.destroy();
+    this._chatReq = null;
+    this._agentReq = null;
+    this._currentAgentTaskId = null;
+    this._flushChatDelta();
+    this._flushAgentTextDelta();
     this._view = undefined;
   }
 }
