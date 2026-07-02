@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { memo, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, ModelIntent, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
 import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
@@ -6,6 +6,7 @@ import { buildBudgetMeterState } from './budget.js';
 import { getVisibleOpenRouterModels } from './openRouterCatalog';
 import { shouldRequestTasksOnToggle } from './taskLoading';
 import { appendVisibleAgentSteps, summarizeToolInputForUi } from './agentProgress';
+import { extractMessageFilePaths } from './messageFilePaths';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -320,7 +321,7 @@ function StreamingTextContent({ content, className = '' }: { content: string; cl
   );
 }
 
-function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
+const MarkdownContent = memo(function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
   const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
 
   return (
@@ -380,7 +381,163 @@ function MarkdownContent({ content, className = '' }: { content: string; classNa
       })}
     </div>
   );
-}
+});
+
+type MessageItemProps = {
+  msg: ChatMessage;
+  isCopied: boolean;
+  hasRetry: boolean;
+  providers: ServerConfig['providers'];
+  inlineFiles: Record<string, FileContent>;
+  inlineEditing: Record<string, string>;
+  onRetry: () => void;
+  onCopy: (id: string, content: string) => void;
+  onReadFiles: (paths: string[]) => void;
+  onToggleInlineEdit: (filePath: string, content: string, close: boolean) => void;
+  onWriteFile: (filePath: string, content: string, originalContent: string) => void;
+};
+
+const MessageItem = memo(function MessageItem({
+  msg,
+  isCopied,
+  hasRetry,
+  providers,
+  inlineFiles,
+  inlineEditing,
+  onRetry,
+  onCopy,
+  onReadFiles,
+  onToggleInlineEdit,
+  onWriteFile,
+}: MessageItemProps) {
+  const filePaths = useMemo(
+    () => msg.role === 'assistant' ? extractMessageFilePaths(msg.content) : [],
+    [msg.content, msg.role]
+  );
+  const loadedFiles = useMemo(
+    () => (msg.touchedFiles || []).filter((path) => inlineFiles[path]),
+    [inlineFiles, msg.touchedFiles]
+  );
+  const providerLabel = useMemo(() => {
+    if (!msg.providerId) return '';
+    if (msg.providerId === 'ollama') return '🏠 ローカル（無料）';
+    const providerName = providers.find(p => p.id === msg.providerId)?.name || msg.providerId;
+    const modelLabel = msg.modelName ? ` · ${msg.modelName}` : msg.model ? ` · ${msg.model}` : '';
+    return `☁️ ${providerName}${modelLabel}`;
+  }, [msg.model, msg.modelName, msg.providerId, providers]);
+
+  return (
+    <div className={`message ${msg.role}${msg.role === 'error' ? ' message-error' : ''}`}>
+      {msg.role === 'user' && msg.imagePreviews && msg.imagePreviews.length > 0 && (
+        <div className="message-image-thumbs">
+          {msg.imagePreviews.map((img, i) => (
+            <div key={i} className="message-image-thumb-wrap">
+              <img
+                src={`data:${img.mimeType};base64,${img.data}`}
+                alt={img.name}
+                className="message-image-thumb"
+                title={img.name}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <MarkdownContent content={msg.content} className="message-markdown" />
+      {msg.role === 'error' && hasRetry && (
+        <button className="message-retry-btn" onClick={onRetry}>
+          ↻ 再試行
+        </button>
+      )}
+      {(msg.role === 'user' || msg.role === 'assistant') && (
+        <button
+          className={`copy-btn${isCopied ? ' copied' : ''}`}
+          onClick={() => onCopy(msg.id, msg.content)}
+          title="コピー"
+        >
+          {isCopied ? '✓' : '⎘'}
+        </button>
+      )}
+      {msg.role === 'assistant' && msg.routingReason && (
+        <div className="message-routing-badge" title={msg.routingReason}>
+          {msg.routingReason}
+        </div>
+      )}
+      {msg.role === 'assistant' && filePaths.length > 0 && (
+        <button
+          className="message-read-files-btn"
+          onClick={() => onReadFiles(filePaths)}
+        >
+          📂 ファイルを表示 ({filePaths.length}件)
+        </button>
+      )}
+      {msg.role === 'assistant' && loadedFiles.length > 0 && (
+        <div className="inline-files">
+          {loadedFiles.map(filePath => {
+            const fc = inlineFiles[filePath];
+            const isEditing = inlineEditing[filePath] !== undefined;
+            return (
+              <div key={filePath} className="inline-file-card">
+                <div className="inline-file-card-header">
+                  <span className="inline-file-path" title={filePath}>
+                    📄 {filePath.split('/').pop() || filePath}
+                  </span>
+                  <span className="inline-file-path-full">{filePath}</span>
+                  <div className="inline-file-card-actions">
+                    <button
+                      className="inline-file-btn"
+                      onClick={() => onToggleInlineEdit(filePath, fc.content, isEditing)}
+                    >
+                      {isEditing ? '👁 表示' : '✏️ 編集'}
+                    </button>
+                    <button
+                      className="inline-file-btn apply"
+                      onClick={() => {
+                        const content = isEditing ? inlineEditing[filePath] : fc.content;
+                        onWriteFile(filePath, content, fc.content);
+                      }}
+                    >
+                      💾 保存前に確認
+                    </button>
+                  </div>
+                </div>
+                {isEditing ? (
+                  <textarea
+                    className="inline-file-editor"
+                    value={inlineEditing[filePath]}
+                    onChange={e => onToggleInlineEdit(filePath, e.target.value, false)}
+                    spellCheck={false}
+                    rows={Math.min(inlineEditing[filePath].split('\n').length, 20)}
+                  />
+                ) : (
+                  <pre className="inline-file-pre">{fc.content}</pre>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="message-meta">
+        {msg.cost_usd > 0 && (
+          <span className="message-cost">
+            {msg.tokens_used.toLocaleString()} tokens · ${msg.cost_usd.toFixed(4)}
+            {msg.cost_jpy > 0 ? ` (¥${msg.cost_jpy.toFixed(2)})` : ''}
+          </span>
+        )}
+        {msg.providerId && (
+          <span className={`message-provider${msg.providerId === 'ollama' ? ' local' : ''}`}>
+            {providerLabel}
+          </span>
+        )}
+        {msg.touchedFiles && msg.touchedFiles.length > 0 && (
+          <span className="message-files">
+            📁 {msg.touchedFiles.slice(0, 3).join(', ')}
+            {msg.touchedFiles.length > 3 ? ` +${msg.touchedFiles.length - 3}` : ''}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+});
 
 function getGitLabel(command: string): string | null {
   if (!/git/.test(command)) return null;
@@ -1535,38 +1692,6 @@ function App() {
   // インライン編集状態: パス → 編集内容
   const [inlineEditing, setInlineEditing] = useState<Record<string, string>>({});
 
-  // メッセージからファイルパスを抽出する
-  const extractFilePaths = useCallback((content: string): string[] => {
-    const patterns = [
-      // backtick code blocks with language: ```typescript:src/file.ts
-      /```[\w]*:([^\s`\n]+)/g,
-      // explicit file paths (relative or absolute)
-      /(?:^|\s)(\.{0,2}\/[\w\-./]+\.\w{1,10})(?:\s|$)/gm,
-    ];
-    const paths = new Set<string>();
-    for (const pattern of patterns) {
-      let match;
-      while ((match = pattern.exec(content)) !== null) {
-        const p = match[1].trim();
-        if (p && !p.startsWith('http') && p.includes('.')) {
-          paths.add(p);
-        }
-      }
-    }
-    return [...paths];
-  }, []);
-
-  // AI応答からファイルパスを検出して自動読み取り
-  const autoReadFilesFromMessages = useCallback((msgs: ChatMessage[]) => {
-    const assistantMsgs = msgs.filter(m => m.role === 'assistant');
-    if (!assistantMsgs.length) return;
-    const lastMsg = assistantMsgs[assistantMsgs.length - 1];
-    const paths = extractFilePaths(lastMsg.content);
-    if (paths.length > 0) {
-      vscode?.postMessage({ command: MSG_READ_FILES, paths });
-    }
-  }, [extractFilePaths]);
-
   // ファイル読み取り
   const handleReadFiles = useCallback((paths: string[]) => {
     vscode?.postMessage({ command: MSG_READ_FILES, paths });
@@ -1580,6 +1705,18 @@ function App() {
       originalContent,
       nextContent: content,
       closeViewer,
+    });
+  }, []);
+
+  const handleToggleInlineEdit = useCallback((filePath: string, content: string, close: boolean) => {
+    setInlineEditing(prev => {
+      const next = { ...prev };
+      if (close) {
+        delete next[filePath];
+      } else {
+        next[filePath] = content;
+      }
+      return next;
     });
   }, []);
 
@@ -1929,131 +2066,20 @@ function App() {
           )
         )}
         {messages.map((msg) => (
-          <div key={msg.id} className={`message ${msg.role}${msg.role === 'error' ? ' message-error' : ''}`}>
-            {/* ユーザーメッセージ: 添付画像サムネイル */}
-            {msg.role === 'user' && msg.imagePreviews && msg.imagePreviews.length > 0 && (
-              <div className="message-image-thumbs">
-                {msg.imagePreviews.map((img, i) => (
-                  <div key={i} className="message-image-thumb-wrap">
-                    <img
-                      src={`data:${img.mimeType};base64,${img.data}`}
-                      alt={img.name}
-                      className="message-image-thumb"
-                      title={img.name}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            <MarkdownContent content={msg.content} className="message-markdown" />
-            {msg.role === 'error' && lastRequestRef.current && (
-              <button className="message-retry-btn" onClick={handleRetryLastRequest}>
-                ↻ 再試行
-              </button>
-            )}
-            {(msg.role === 'user' || msg.role === 'assistant') && (
-              <button
-                className={`copy-btn${copiedIds.has(msg.id) ? ' copied' : ''}`}
-                onClick={() => handleCopy(msg.id, msg.content)}
-                title="コピー"
-              >
-                {copiedIds.has(msg.id) ? '✓' : '⎘'}
-              </button>
-            )}
-            {/* アシスタントメッセージ: Gemini画像処理・ルーティングバッジ */}
-            {msg.role === 'assistant' && msg.routingReason && (
-              <div className="message-routing-badge" title={msg.routingReason}>
-                {msg.routingReason}
-              </div>
-            )}
-            {/* ファイルパスが含まれている場合、読み取りボタンを表示 */}
-            {msg.role === 'assistant' && extractFilePaths(msg.content).length > 0 && (
-              <button
-                className="message-read-files-btn"
-                onClick={() => handleReadFiles(extractFilePaths(msg.content))}
-              >
-                📂 ファイルを表示 ({extractFilePaths(msg.content).length}件)
-              </button>
-            )}
-            {/* インラインファイルカード (touchedFilesから) */}
-            {msg.role === 'assistant' && msg.touchedFiles && msg.touchedFiles.length > 0 && (() => {
-              const loadedFiles = msg.touchedFiles.filter(p => inlineFiles[p]);
-              if (loadedFiles.length === 0) return null;
-              return (
-                <div className="inline-files">
-                  {loadedFiles.map(filePath => {
-                    const fc = inlineFiles[filePath];
-                    const isEditing = inlineEditing[filePath] !== undefined;
-                    return (
-                      <div key={filePath} className="inline-file-card">
-                        <div className="inline-file-card-header">
-                          <span className="inline-file-path" title={filePath}>
-                            📄 {filePath.split('/').pop() || filePath}
-                          </span>
-                          <span className="inline-file-path-full">{filePath}</span>
-                          <div className="inline-file-card-actions">
-                            <button
-                              className="inline-file-btn"
-                              onClick={() => {
-                                if (isEditing) {
-                                  setInlineEditing(prev => { const n = {...prev}; delete n[filePath]; return n; });
-                                } else {
-                                  setInlineEditing(prev => ({ ...prev, [filePath]: fc.content }));
-                                }
-                              }}
-                            >
-                              {isEditing ? '👁 表示' : '✏️ 編集'}
-                            </button>
-                            <button
-                              className="inline-file-btn apply"
-                              onClick={() => {
-                                const content = isEditing ? inlineEditing[filePath] : fc.content;
-                                handleWriteFile(filePath, content, fc.content);
-                              }}
-                            >
-                              💾 保存前に確認
-                            </button>
-                          </div>
-                        </div>
-                        {isEditing ? (
-                          <textarea
-                            className="inline-file-editor"
-                            value={inlineEditing[filePath]}
-                            onChange={e => setInlineEditing(prev => ({ ...prev, [filePath]: e.target.value }))}
-                            spellCheck={false}
-                            rows={Math.min(inlineEditing[filePath].split('\n').length, 20)}
-                          />
-                        ) : (
-                          <pre className="inline-file-pre">{fc.content}</pre>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-            <div className="message-meta">
-              {msg.cost_usd > 0 && (
-                <span className="message-cost">
-                  {msg.tokens_used.toLocaleString()} tokens · ${msg.cost_usd.toFixed(4)}
-                  {msg.cost_jpy > 0 ? ` (¥${msg.cost_jpy.toFixed(2)})` : ''}
-                </span>
-              )}
-              {msg.providerId && (
-                <span className={`message-provider${msg.providerId === 'ollama' ? ' local' : ''}`}>
-                  {msg.providerId === 'ollama'
-                    ? '🏠 ローカル（無料）'
-                    : `☁️ ${serverConfig.providers.find(p => p.id === msg.providerId)?.name || msg.providerId}${msg.modelName ? ` · ${msg.modelName}` : msg.model ? ` · ${msg.model}` : ''}`}
-                </span>
-              )}
-              {msg.touchedFiles && msg.touchedFiles.length > 0 && (
-                <span className="message-files">
-                  📁 {msg.touchedFiles.slice(0, 3).join(', ')}
-                  {msg.touchedFiles.length > 3 ? ` +${msg.touchedFiles.length - 3}` : ''}
-                </span>
-              )}
-            </div>
-          </div>
+          <MessageItem
+            key={msg.id}
+            msg={msg}
+            isCopied={copiedIds.has(msg.id)}
+            hasRetry={Boolean(lastRequestRef.current)}
+            providers={serverConfig.providers}
+            inlineFiles={inlineFiles}
+            inlineEditing={inlineEditing}
+            onRetry={handleRetryLastRequest}
+            onCopy={handleCopy}
+            onReadFiles={handleReadFiles}
+            onToggleInlineEdit={handleToggleInlineEdit}
+            onWriteFile={handleWriteFile}
+          />
         ))}
         {/* ── エージェントモード: ストリーミングテキスト + ステップ表示 ── */}
         {agentMode === 'agent' && (loading || agentSteps.some(e => e.type === 'file_change_applied' || e.type === 'file_change_undone')) && (

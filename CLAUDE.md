@@ -135,6 +135,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - タスク管理: JSON永続化、チャット履歴の複数タスク管理
 - Safe Shell起動: VS Code起動時・Toriiビュー復元時は静的HTMLのみを表示し、ユーザーが「Toriiを起動」を押すまでReact Webview / storage / Express server / license check / task loadを開始しない
+- メッセージ描画ホットパス削減: チャット履歴の各メッセージをmemo化し、Markdownレンダリングとファイルパス抽出をメッセージ本文変更時だけ再計算する
 - コマンドガード: 危険なコマンドパターンをブロック
 - 画像添付対応（マルチモーダルモデル + Gemini自動橋渡し）
 - エディタ内容の添付（現在ファイルをコンテキストに追加）
@@ -166,6 +167,13 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-02
+- **0.6.14 メッセージ描画ホットパス削減**:
+  - **`webview/src/App.tsx`**: チャット履歴の1メッセージ表示を `MessageItem` に切り出して `React.memo` 化。ストリーミングdeltaやAgentイベント更新のたびに過去メッセージ全体のMarkdown/ファイルパス処理が再実行される経路を削減
+  - **`webview/src/App.tsx`**: `MarkdownContent` を `React.memo` 化し、既存メッセージ本文が変わらない限り `parseMarkdownBlocks` / `renderInlineMarkdown` を再実行しないよう変更
+  - **`webview/src/messageFilePaths.ts`**: メッセージ内ファイルパス抽出を純関数化し、バックトラッキングしやすいグローバル正規表現を廃止。コードフェンス指定と明示的な相対/絶対パスだけを軽量に抽出する
+  - **`webview/src/messageFilePaths.test.ts` / `package.json`**: ファイルパス抽出の回帰テストを追加し、`npm test` に組み込み
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.14` へ更新
+
 - **0.6.13 Agentツールイベント連打によるRenderer応答停止対策**:
   - **`src/webview/agentEventBatch.ts` / `src/webview/provider.ts`**: Cline SDK の `tool-started` / `tool-finished` 由来の `tool_use` / `tool_result` を250ms単位でバッチ化し、Webviewへの `postMessage` 連打を削減。`approval_required` / `done` / `error` は即時送信を維持
   - **`webview/src/agentProgress.ts` / `webview/src/App.tsx`**: Agentステップ表示を最大30件に制限し、UI用tool inputは `path` / `command` / `pattern` など短い表示フィールドだけに正規化
