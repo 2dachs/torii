@@ -177,6 +177,13 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-02
+- **0.6.13 Agentツールイベント連打によるRenderer応答停止対策**:
+  - **`src/webview/agentEventBatch.ts` / `src/webview/provider.ts`**: Cline SDK の `tool-started` / `tool-finished` 由来の `tool_use` / `tool_result` を250ms単位でバッチ化し、Webviewへの `postMessage` 連打を削減。`approval_required` / `done` / `error` は即時送信を維持
+  - **`webview/src/agentProgress.ts` / `webview/src/App.tsx`**: Agentステップ表示を最大30件に制限し、UI用tool inputは `path` / `command` / `pattern` など短い表示フィールドだけに正規化
+  - **`webview/src/App.tsx`**: `agentSteps.length` を自動スクロールeffectの依存から外し、ファイル読み取りイベントのたびに `scrollHeight` を読む経路を停止
+  - **`src/webview/agentEventBatch.test.ts` / `webview/src/agentProgress.test.ts` / `package.json`**: Agentイベントバッチ化と表示ステップ制限のNodeテストを追加
+  - **`package.json` / `package-lock.json`**: 修正版として `0.6.13` へ更新
+
 - **0.6.12 タスク履歴読み込みの完全遅延化**:
   - **`src/webview/provider.ts`**: 通常React UI初期化時の初期データからタスク一覧送信を除外。`loadTasks` 明示要求時だけ `getTasks()` を実行するよう変更
   - **`src/webview/taskPayload.ts` / `src/webview/provider.ts`**: Webviewへ送るタスク一覧を最大20件・title最大120文字へ制限し、必要フィールドだけに正規化。古い/壊れたentryや想定外フィールドをWebview stateへ載せない

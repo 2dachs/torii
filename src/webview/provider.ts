@@ -14,6 +14,7 @@ import { buildSafeShellHtml } from './safeShell';
 import { sanitizeOpenRouterModelsForWebview } from './openRouterModelPayload';
 import { InitialDataGate } from './initialDataGate';
 import { sanitizeTasksForWebview } from './taskPayload';
+import { AGENT_EVENT_BATCH_FLUSH_MS, AgentEventBatch, shouldBatchAgentEvent } from './agentEventBatch';
 import {
   EXTENSION_DISPLAY_NAME,
   MSG_LOAD_TASKS,
@@ -133,6 +134,10 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   private _chatDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   private _agentTextDeltaBuffer = '';
   private _agentTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  private _agentEventBatchTimer: ReturnType<typeof setTimeout> | null = null;
+  private _agentEventBatch = new AgentEventBatch((events) => {
+    this._view?.webview.postMessage({ command: 'agentEvents', events });
+  });
   private _initialDataGate = new InitialDataGate();
   // 設定書き込みをシリアル化するキュー（onBlur/onClick 競合によるレース防止）
   private _configWriteQueue: Promise<void> = Promise.resolve();
@@ -712,6 +717,8 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   private async _handleCancelAgent() {
+    this._flushAgentTextDelta();
+    this._flushAgentEventBatch();
     if (this._agentReq) {
       this._agentReq.destroy();
       this._agentReq = null;
@@ -967,6 +974,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       });
       res.on('end', () => {
         this._flushAgentTextDelta();
+        this._flushAgentEventBatch();
         this._agentReq = null;
         this._currentAgentTaskId = null;
         // SSE 終了後に予算表示を更新
@@ -976,6 +984,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
 
     this._agentReq.on('error', (e: Error) => {
       this._flushAgentTextDelta();
+      this._flushAgentEventBatch();
       this._agentReq = null;
       this._currentAgentTaskId = null;
       if (e.message !== 'socket hang up') {
@@ -994,6 +1003,11 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       return;
     }
     this._flushAgentTextDelta();
+    if (shouldBatchAgentEvent(event)) {
+      this._queueAgentEvent(event);
+      return;
+    }
+    this._flushAgentEventBatch();
     this._view.webview.postMessage({ command: 'agentEvent', event });
   }
 
@@ -1029,6 +1043,20 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     const text = this._agentTextDeltaBuffer;
     this._agentTextDeltaBuffer = '';
     this._view.webview.postMessage({ command: 'agentEvent', event: { type: 'text_delta', text } });
+  }
+
+  private _queueAgentEvent(event: any) {
+    this._agentEventBatch.push(event);
+    if (this._agentEventBatchTimer) return;
+    this._agentEventBatchTimer = setTimeout(() => this._flushAgentEventBatch(), AGENT_EVENT_BATCH_FLUSH_MS);
+  }
+
+  private _flushAgentEventBatch() {
+    if (this._agentEventBatchTimer) {
+      clearTimeout(this._agentEventBatchTimer);
+      this._agentEventBatchTimer = null;
+    }
+    this._agentEventBatch.flush();
   }
 
   /** エージェント承認応答をExpressサーバーに転送 */
@@ -1437,6 +1465,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     this._currentAgentTaskId = null;
     this._flushChatDelta();
     this._flushAgentTextDelta();
+    this._flushAgentEventBatch();
     this._view = undefined;
   }
 }

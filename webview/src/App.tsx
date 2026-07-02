@@ -5,11 +5,10 @@ import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, 
 import { buildBudgetMeterState } from './budget.js';
 import { getVisibleOpenRouterModels } from './openRouterCatalog';
 import { shouldRequestTasksOnToggle } from './taskLoading';
+import { appendVisibleAgentSteps, summarizeToolInputForUi } from './agentProgress';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
-const MAX_AGENT_STEPS = 80;
-
 const TOOL_JAPANESE_NAMES: Record<string, string> = {
   read_file: 'ファイル読み込み中',
   write_file: 'ファイル編集中',
@@ -467,16 +466,8 @@ function App() {
     return set;
   }, [agentSteps]);
 
-  const recordAgentStep = useCallback((evt: AgentEvent) => {
-    if (
-      evt.type !== 'tool_use' &&
-      evt.type !== 'tool_result' &&
-      evt.type !== 'file_change_applied' &&
-      evt.type !== 'file_change_undone'
-    ) {
-      return;
-    }
-    setAgentSteps((prev) => [...prev.slice(-(MAX_AGENT_STEPS - 1)), evt]);
+  const recordAgentSteps = useCallback((events: AgentEvent[]) => {
+    setAgentSteps((prev) => appendVisibleAgentSteps(prev, events));
   }, []);
   // スラッシュコマンドサジェスト
   const [showSlashSuggest, setShowSlashSuggest] = useState(false);
@@ -836,10 +827,25 @@ function App() {
           // タスク作成後にタスク一覧を再取得
           requestTasks();
           break;
+        case 'agentEvents': {
+          const events = Array.isArray(msg.events) ? msg.events as AgentEvent[] : [];
+          if (events.length === 0) break;
+          recordAgentSteps(events);
+          const lastProgressEvent = [...events].reverse().find((event) => event.type === 'tool_use' || event.type === 'tool_result');
+          if (lastProgressEvent?.type === 'tool_use') {
+            setAgentPhase('executing');
+            setCurrentToolName(lastProgressEvent.tool);
+            setCurrentToolInput(summarizeToolInputForUi(lastProgressEvent.input));
+          } else if (lastProgressEvent?.type === 'tool_result') {
+            setAgentPhase('thinking');
+            setCurrentToolName(null);
+          }
+          break;
+        }
         case 'agentEvent': {
           const evt = msg.event as AgentEvent;
           if (!evt) break;
-          recordAgentStep(evt);
+          recordAgentSteps([evt]);
           if (evt.type === 'task_created') {
             isNewChatModeRef.current = false;
             setActiveTaskId(evt.taskId);
@@ -854,7 +860,7 @@ function App() {
           } else if (evt.type === 'tool_use') {
             setAgentPhase('executing');
             setCurrentToolName(evt.tool);
-            setCurrentToolInput(evt.input);
+            setCurrentToolInput(summarizeToolInputForUi(evt.input));
           } else if (evt.type === 'tool_result') {
             setAgentPhase('thinking');
             setCurrentToolName(null);
@@ -1057,7 +1063,7 @@ function App() {
 
     return () => window.removeEventListener('message', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordAgentStep, requestTasks]);
+  }, [recordAgentSteps, requestTasks]);
 
   // ── タスク選択時にチャット履歴を読み込む（初回起動時は読み込まない） ──
   const prevTaskIdRef = useRef<string | null | undefined>(undefined);
@@ -1119,7 +1125,7 @@ function App() {
         scrollFrameRef.current = null;
       }
     };
-  }, [messages, processingStatus, agentSteps.length, pendingApprovals.length, streamingText, isStreaming]);
+  }, [messages, processingStatus, pendingApprovals.length, streamingText, isStreaming]);
 
   // ── メッセージ送信 ──
   const handleSend = useCallback(() => {

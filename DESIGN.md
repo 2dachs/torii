@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.6.12）
+## 3. 現在の実装状態（v0.6.13）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
@@ -101,6 +101,7 @@
 - **Safe Shell起動**: VS Code起動時・Toriiビュー復元時はReact Webview / storage / Express server / license check / task loadを開始せず、静的HTMLの「Toriiを起動」押下後だけ本体を初期化する
 - **React UI初期化の単一起点化**: 通常UI表示後はReact側の `webviewReady` を受けてからProviderが1回だけ初期データを送信し、起動直後の重複 `loadTasks` / `settingsConfig` / `licenseStatus` を発生させない
 - **タスク履歴読み込みの完全遅延化**: 起動直後は `getTasks()` を呼ばず、ユーザーがタスクリストを開くか「最近のチャットを読み込む」を押した時だけタスク一覧を取得する。Webviewへ送るタスクpayloadは最大20件・必要フィールドのみに制限
+- **Agent進捗表示の負荷削減**: Cline SDK のtool lifecycleイベントは250ms単位でバッチ化し、Agentステップ表示は最大30件・短い表示フィールドのみに制限。Agentステップ更新では自動スクロールを発火させない
 - **OpenRouterモデル一覧の安定化**: 設定画面ではOpenRouterモデル一覧のWebview転送payloadを必要フィールド・最大300件へ制限し、候補DOM描画も最大12件に抑える
 - **ビルド成果物の長行対策**: esbuild出力の行長を制限し、生成JSを開いてもVS Codeが固まりにくいように改善
 - **Webview CSP対策**: VS Code内部のlocalhostアセット配信を許可し、Webview起動ログで診断可能に改善

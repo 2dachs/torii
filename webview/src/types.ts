@@ -254,6 +254,7 @@ export interface VsCodeMessage {
   value?: string;
   message?: string;
   event?: AgentEvent;
+  events?: AgentEvent[];
   id?: string;
   approved?: boolean;
 }
