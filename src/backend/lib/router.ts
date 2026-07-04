@@ -138,7 +138,21 @@ export class PromptRouter {
       }
     }
 
-    // ── 2.5. OpenRouter 用途別モデル（手動指定または自動判定）──
+    // ── 3. セキュリティ監査キーワード → Claude Opus ──
+    if (PromptRouter.matchesAny(lowerPrompt, ROUTER_CONFIG.securityAuditKeywords)) {
+      const opusModel = PROVIDERS.anthropic.models.find((m) => m.tier === 'opus');
+      if (opusModel) {
+        return {
+          providerId: 'anthropic',
+          modelId: opusModel.id,
+          providerName: PROVIDERS.anthropic.name,
+          modelName: opusModel.name,
+          reason: '🛡️ セキュリティ監査キーワードを検出。Claude Opus (最高峰) を選択しました',
+        };
+      }
+    }
+
+    // ── 3.5. OpenRouter 用途別モデル（手動指定または自動判定）──
     const openRouterIntent = PromptRouter.resolveOpenRouterIntent(
       lowerPrompt,
       currentProviderId,
@@ -157,20 +171,6 @@ export class PromptRouter {
           reason: openRouterIntent === 'planning'
             ? '💬 相談・レビュー・設計タスクを検出。OpenRouterの相談モデルを選択しました'
             : '🛠️ 実装タスクを検出。OpenRouterの実装モデルを選択しました',
-        };
-      }
-    }
-
-    // ── 3. セキュリティ監査キーワード → Claude Opus ──
-    if (PromptRouter.matchesAny(lowerPrompt, ROUTER_CONFIG.securityAuditKeywords)) {
-      const opusModel = PROVIDERS.anthropic.models.find((m) => m.tier === 'opus');
-      if (opusModel) {
-        return {
-          providerId: 'anthropic',
-          modelId: opusModel.id,
-          providerName: PROVIDERS.anthropic.name,
-          modelName: opusModel.name,
-          reason: '🛡️ セキュリティ監査キーワードを検出。Claude Opus (最高峰) を選択しました',
         };
       }
     }

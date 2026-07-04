@@ -109,7 +109,8 @@
 .agent-window-primary-button,
 .agent-window-secondary-button,
 .agent-window-composer button,
-.agent-window-tabs button {
+.agent-window-tabs button,
+.agent-window-model-switch button {
   border: 1px solid var(--irori-border);
   border-radius: 8px;
   font: inherit;
@@ -143,7 +144,39 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.agent-window-model-switch {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--irori-border);
+  border-radius: 8px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.agent-window-model-switch button {
+  min-width: 48px;
+  min-height: 30px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--irori-muted);
+  font-size: 12px;
+}
+
+.agent-window-model-switch button.is-active {
+  border-color: var(--irori-gold);
+  background: rgba(201, 169, 110, 0.16);
+  color: var(--irori-ink);
+}
+
+.agent-window-model-switch button:disabled {
+  opacity: 0.55;
 }
 
 .agent-window-status {

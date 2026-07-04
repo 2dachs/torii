@@ -14,7 +14,7 @@
 - **予算管理（JPY/USD表示切替）** — 月間利用コストを円またはドルで表示。バーグラフで予算消費を可視化
 - **ローカルLLM自動ルーティング** — 機密キーワードを含むプロンプトを自動的に Ollama（ローカル）へ転送。APIキー・ソースコードがクラウドに送信されない
 - **エージェントループ** — ファイル読み書き・コマンド実行をワンクリック承認で自律実行
-- **Agent Window（開発中）** — エディタタブとして開く大画面エージェントGUI。プロジェクト名/パス表示、設定導線、タスク一覧、履歴、Agent送信、承認/拒否カード、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、@ファイルメンションまで接続済み。外部URLはSimple Browserで開く
+- **Agent Window（開発中）** — エディタタブとして開く大画面エージェントGUI。プロジェクト名/パス表示、設定導線、モデル用途切替、タスク一覧、履歴、Agent送信、承認/拒否カード、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、@ファイルメンションまで接続済み。外部URLはSimple Browserで開く
 - **日本語UI** — メッセージ・エラー文言をすべて日本語で表示
 - **ストリーミング応答** — SSEによるリアルタイム出力
 
@@ -150,7 +150,7 @@ VS Code の設定（`settings.json`）に追加することで、任意のキー
 - **Auto-routing to local LLM** — privacy-sensitive prompts are automatically sent to Ollama (no cloud)
 - **OpenRouter task routing** — use GLM 5.2 for review/design and DeepSeek V4 Flash for implementation via auto or one-shot manual switching
 - **Agent loop** — reads/writes files and runs commands autonomously with one-click approval
-- **Agent Window (in development)** — opens a large editor-tab agent GUI with tasks, history, agent sends, approve/reject cards, same-task run exclusion, lightweight file tree, localhost preview, and file mentions wired; external URLs open in Simple Browser
+- **Agent Window (in development)** — opens a large editor-tab agent GUI with project context, settings, model intent switching, tasks, history, agent sends, approve/reject cards, same-task run exclusion, lightweight file tree, localhost preview, and file mentions wired; external URLs open in Simple Browser
 - **Japanese UI** — all messages and error text in Japanese
 - **Streaming responses** — real-time output via SSE
 
@@ -181,7 +181,7 @@ Then set the sub-provider to `Ollama` in Torii settings and enable auto-routing.
 
 ## OpenRouter Task Routing
 
-When OpenRouter is the active provider, Torii can route by task type. Review, design, and implementation-plan prompts default to `z-ai/glm-5.2`; implementation and fix prompts default to `deepseek/deepseek-v4-flash`. Use the input toolbar's `Auto` / `相談` / `実装` buttons to override the next message only.
+When OpenRouter is the active provider, Torii can route by task type. Review, design, and implementation-plan prompts default to `z-ai/glm-5.2`; implementation and fix prompts default to `deepseek/deepseek-v4-flash`. Use the input toolbar's `Auto` / `相談` / `実装` buttons to override the next message only. Agent Window also includes `GLM実装`, which uses the planning-model slot for higher-quality implementation runs.
 
 Router and budget unit tests can be run with:
 

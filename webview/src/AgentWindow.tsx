@@ -8,6 +8,13 @@ import {
 } from './agentWindowMentions';
 import { getPreviewUrlTarget } from './agentWindowPreview';
 import { applyAgentWindowMessage, type AgentWindowState } from './agentWindowState';
+import {
+  agentWindowModelModes,
+  getAgentWindowModelIntent,
+  getAgentWindowModelModeLabel,
+  getAgentWindowModelModeTitle,
+  type AgentWindowModelMode,
+} from './agentWindowModelMode';
 import type { AgentEvent, ChatMessage, PendingApproval, VsCodeMessage } from './types';
 
 declare const acquireVsCodeApi: undefined | (() => { postMessage(message: unknown): void });
@@ -40,6 +47,7 @@ export default function AgentWindow() {
   const [previewInput, setPreviewInput] = useState('3000');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
+  const [modelMode, setModelMode] = useState<AgentWindowModelMode>('auto');
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionCandidates, setMentionCandidates] = useState<FileMentionEntry[]>([]);
   const [mentionError, setMentionError] = useState<string | null>(null);
@@ -155,7 +163,7 @@ export default function AgentWindow() {
       text,
       taskId: state.activeTaskId,
       agentMode: 'agent',
-      modelIntent: 'implementation',
+      modelIntent: getAgentWindowModelIntent(modelMode),
       mentionedFiles: mentionedFiles.map((file) => file.path),
     });
   };
@@ -273,6 +281,20 @@ export default function AgentWindow() {
             </p>
           </div>
           <div className="agent-window-header-actions">
+            <div className="agent-window-model-switch" aria-label="Model routing mode">
+              {agentWindowModelModes.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={modelMode === mode ? 'is-active' : ''}
+                  title={getAgentWindowModelModeTitle(mode)}
+                  disabled={state.loading}
+                  onClick={() => setModelMode(mode)}
+                >
+                  {getAgentWindowModelModeLabel(mode)}
+                </button>
+              ))}
+            </div>
             <button type="button" className="agent-window-secondary-button" onClick={handleOpenSettings}>設定</button>
             <div className="agent-window-status">
               {state.blockedOwner === 'sidebar' ? 'サイドバーで実行中' : serverPort ? `Backend :${serverPort}` : 'Backend 接続中'}

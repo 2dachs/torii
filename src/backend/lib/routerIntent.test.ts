@@ -43,6 +43,19 @@ test('privacy keywords still route to Ollama before OpenRouter intent routing', 
   assert.match(result.reason, /プライバシー/);
 });
 
+test('security audit keywords route to Claude Opus before OpenRouter implementation intent', () => {
+  const result = PromptRouter.route('XSSの脆弱性を修正して', 'openrouter', 'openai/gpt-4o', 0.1, false, true, [], {
+    modelIntent: 'implementation',
+    executionMode: 'agent',
+    openRouterPlanningModel: 'z-ai/glm-5.2',
+    openRouterImplementationModel: 'deepseek/deepseek-v4-flash',
+    customPrivacyKeywords: [],
+  });
+
+  assert.equal(result.providerId, 'anthropic');
+  assert.match(result.reason, /セキュリティ/);
+});
+
 test('manual planning intent routes to OpenRouter even when the current provider is DeepSeek', () => {
   const result = PromptRouter.route('相談モードで考えてください', 'deepseek', 'deepseek-chat', 0.1, false, true, [], {
     modelIntent: 'planning',
