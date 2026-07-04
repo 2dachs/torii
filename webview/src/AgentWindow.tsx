@@ -28,6 +28,8 @@ interface FileMentionEntry {
 export default function AgentWindow() {
   const [serverPort, setServerPort] = useState<number | null>(null);
   const [extensionName, setExtensionName] = useState('Torii');
+  const [workspaceName, setWorkspaceName] = useState('ワークスペース確認中');
+  const [workspacePath, setWorkspacePath] = useState('');
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   const [resolvedApprovalIds, setResolvedApprovalIds] = useState<Set<string>>(() => new Set());
@@ -61,6 +63,10 @@ export default function AgentWindow() {
       }
       if (message.command === 'extensionName' && typeof message.name === 'string') {
         setExtensionName(message.name);
+      }
+      if (message.command === 'workspaceInfo') {
+        setWorkspaceName(typeof (message as any).name === 'string' ? (message as any).name : 'ワークスペース未設定');
+        setWorkspacePath(typeof (message as any).path === 'string' ? (message as any).path : '');
       }
       if (message.command === 'fileTree') {
         setFileTreePath(typeof (message as any).path === 'string' ? (message as any).path : '');
@@ -99,6 +105,10 @@ export default function AgentWindow() {
 
   const handleCreateTask = () => {
     vscode?.postMessage({ command: 'createTask', title: '新規タスク' });
+  };
+
+  const handleOpenSettings = () => {
+    vscode?.postMessage({ command: 'openSettings' });
   };
 
   const updateComposerInput = (value: string) => {
@@ -221,6 +231,11 @@ export default function AgentWindow() {
           <span className="agent-window-kicker">{extensionName}</span>
           <h1>Agent Window</h1>
         </div>
+        <section className="agent-window-workspace">
+          <span>Project</span>
+          <strong>{workspaceName}</strong>
+          {workspacePath && <small title={workspacePath}>{workspacePath}</small>}
+        </section>
         <button className="agent-window-primary-button" type="button" onClick={handleCreateTask}>新規タスク</button>
         <section className="agent-window-section">
           <h2>Tasks</h2>
@@ -253,9 +268,15 @@ export default function AgentWindow() {
           <div>
             <p className="agent-window-kicker">Torii Agent</p>
             <h2>{activeTask?.title ?? '大画面エージェント作業タブ'}</h2>
+            <p className="agent-window-workspace-line" title={workspacePath}>
+              {workspaceName}{workspacePath ? ` · ${workspacePath}` : ''}
+            </p>
           </div>
-          <div className="agent-window-status">
-            {state.blockedOwner === 'sidebar' ? 'サイドバーで実行中' : serverPort ? `Backend :${serverPort}` : 'Backend 接続中'}
+          <div className="agent-window-header-actions">
+            <button type="button" className="agent-window-secondary-button" onClick={handleOpenSettings}>設定</button>
+            <div className="agent-window-status">
+              {state.blockedOwner === 'sidebar' ? 'サイドバーで実行中' : serverPort ? `Backend :${serverPort}` : 'Backend 接続中'}
+            </div>
           </div>
         </header>
 

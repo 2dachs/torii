@@ -49,14 +49,14 @@ export class AgentWindowPanel {
 
   static open(context: vscode.ExtensionContext, runtime: ToriiRuntime): AgentWindowPanel {
     if (AgentWindowPanel.currentPanel) {
-      AgentWindowPanel.currentPanel.panel.reveal(vscode.ViewColumn.Active);
+      AgentWindowPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
       return AgentWindowPanel.currentPanel;
     }
 
     const panel = vscode.window.createWebviewPanel(
       'torii.agentWindow',
       'Torii Agent',
-      vscode.ViewColumn.Active,
+      vscode.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -139,6 +139,11 @@ export class AgentWindowPanel {
 
     if (message?.command === 'searchFileMentions') {
       await this.sendFileMentions(message.query);
+      return;
+    }
+
+    if (message?.command === 'openSettings') {
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'torii');
     }
   }
 
@@ -151,6 +156,12 @@ export class AgentWindowPanel {
       command: 'extensionName',
       name: EXTENSION_DISPLAY_NAME,
     });
+    const workspace = this.getWorkspaceInfo();
+    await this.panel.webview.postMessage({
+      command: 'workspaceInfo',
+      name: workspace.name,
+      path: workspace.path,
+    });
   }
 
   private getWorkspaceId(): string {
@@ -159,6 +170,12 @@ export class AgentWindowPanel {
 
   private getWorkspaceRoot(): string {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+  }
+
+  private getWorkspaceInfo(): { name: string; path: string } {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return { name: 'ワークスペース未設定', path: '' };
+    return { name: folder.name || path.basename(folder.uri.fsPath), path: folder.uri.fsPath };
   }
 
   private resolveWorkspacePath(relativePath?: string | null): string {
