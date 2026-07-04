@@ -15,6 +15,8 @@ import {
   getAgentWindowModelModeTitle,
   type AgentWindowModelMode,
 } from './agentWindowModelMode';
+import { stripAgentInternalReminder } from './agentWindowMessageText';
+import { getAgentWindowProgressText } from './agentWindowProgress';
 import type { AgentEvent, ChatMessage, PendingApproval, VsCodeMessage } from './types';
 
 declare const acquireVsCodeApi: undefined | (() => { postMessage(message: unknown): void });
@@ -179,6 +181,13 @@ export default function AgentWindow() {
   };
 
   const pendingApprovals = getPendingAgentWindowApprovals(state.agentEvents, resolvedApprovalIds);
+  const latestUserPrompt = [...state.messages].reverse().find((message) => message.role === 'user')?.content ?? input;
+  const progressText = getAgentWindowProgressText({
+    loading: state.loading,
+    prompt: latestUserPrompt,
+    streamingText: state.streamingText,
+    events: state.agentEvents,
+  });
 
   const handleApproval = (approval: PendingApproval, approved: boolean) => {
     setResolvedApprovalIds((current) => new Set(current).add(approval.id));
@@ -307,6 +316,13 @@ export default function AgentWindow() {
             {state.blockedOwner === 'sidebar'
               ? 'このタスクはサイドバー側でAgent実行中です。完了後にAgent Windowから再実行できます。'
               : 'このタスクは別のAgent Windowで実行中です。'}
+          </div>
+        )}
+
+        {progressText && (
+          <div className="agent-window-progress-status" role="status" aria-live="polite">
+            <span className="agent-window-progress-dot" aria-hidden="true" />
+            <span>{progressText}</span>
           </div>
         )}
 
@@ -486,12 +502,13 @@ function toFileMentionEntries(value: unknown): FileMentionEntry[] {
 
 function AgentMessage({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
+  const content = isUser ? message.content : stripAgentInternalReminder(message.content);
   return (
     <article className={`agent-window-message ${isUser ? 'agent-window-message-user' : 'agent-window-message-assistant'}`}>
       <p className="agent-window-message-meta">
         {isUser ? 'You' : 'Torii'} · {formatTaskDate(message.created_at)}
       </p>
-      <p>{message.content}</p>
+      <p>{content}</p>
     </article>
   );
 }

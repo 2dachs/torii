@@ -136,7 +136,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
 - 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/難易度/予算に応じてモデル自動切替
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
-- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・新規タスク作成・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンションまで接続済み。外部URLはVS Code Simple Browserへフォールバック
+- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・新規タスク作成・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンションまで接続済み。外部URLはVS Code Simple Browserへフォールバック
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - タスク管理: JSON永続化、チャット履歴の複数タスク管理
@@ -174,6 +174,12 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-04
+- **0.8.2 Agent Windowレビュー停止感の改善**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: Agent Window進行表示と内部REMINDER漏れ修正の配布用にバージョン表記を `0.8.2` へ更新
+- **Agent Window進行表示と内部REMINDER漏れ修正**:
+  - **`webview/src/agentWindowProgress.ts` / `webview/src/AgentWindow.tsx` / `webview/src/agent-window.css`**: Agent Windowヘッダー下に `コードレビューについて思考中...` / `回答を組み立て中...` / `承認が必要な操作があります` などの日本語進行ステータスを表示
+  - **`src/backend/toolResultReminder.ts` / `src/backend/tools.ts`**: `attempt_completion` の最終出力には内部用 `[REMINDER: ...]` を付けないよう修正
+  - **`webview/src/agentWindowMessageText.ts`**: 既に保存済みの履歴に内部REMINDERが残っていてもAgent Window表示時は除去する
 - **0.8.1 配布用バージョン更新**:
   - **`package.json` / `package-lock.json` / `DESIGN.md`**: VSIX再配布用にバージョン表記を `0.8.1` へ更新
 - **Agent Windowモデル用途切替とセキュリティ優先ルーティング**:

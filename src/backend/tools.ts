@@ -9,6 +9,7 @@ import { isTerminalCommandSafe } from './commandGuard';
 import { requestApproval } from './approvalManager';
 import { CONFIG_COMMAND_ALLOWLIST, CONFIG_SECTION } from '../constants';
 import { getDiffPreviewDecision } from './diffPreviewPolicy';
+import { appendTaskReminderForToolResult, TASK_REMINDER } from './toolResultReminder';
 
 let _outputChannel: vscode.OutputChannel | null = null;
 function getOutputChannel(): vscode.OutputChannel {
@@ -325,8 +326,6 @@ export async function buildClineTools(
 
   const readFileCache = new Map<string, { content: string; mtimeMs: number; size: number }>();
   const fileWriteCountMap = new Map<string, number>();
-
-  const TASK_REMINDER = '\n\n[REMINDER: 元のタスクに集中し、完了までツールを使い続けよ。attempt_completion を呼ぶまで停止するな。]';
 
   const rawTools: AgentTool<any, any>[] = [
     // ── read_file ──
@@ -776,7 +775,7 @@ export async function buildClineTools(
     ...tool,
     execute: async (input: any) => {
       const result = await (tool.execute as (input: any) => Promise<any>)(input);
-      return typeof result === 'string' ? result + TASK_REMINDER : result;
+      return appendTaskReminderForToolResult(tool.name, result);
     },
   }));
 }
