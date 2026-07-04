@@ -185,6 +185,8 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-04
+- **0.8.1 配布用バージョン更新**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: VSIX再配布用にバージョン表記を `0.8.1` へ更新
 - **Agent Windowモデル用途切替とセキュリティ優先ルーティング**:
   - **`webview/src/AgentWindow.tsx` / `webview/src/agentWindowModelMode.ts` / `webview/src/agent-window.css`**: Agent Windowヘッダーに `Auto` / `相談` / `実装` / `GLM実装` の用途切替を追加。`GLM実装` は相談モデルスロットを使う高品質実装モードとして送信payloadに `planning` intentを渡す
   - **`src/backend/lib/router.ts`**: セキュリティ監査キーワードはOpenRouterの用途指定より優先してClaude Opusへルーティングする順序に修正
