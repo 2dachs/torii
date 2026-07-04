@@ -185,6 +185,8 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-04
+- **0.8.0 Agent Window初期リリース用バージョン更新**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: Agent Window Phase 1配布用にバージョン表記を `0.8.0` へ更新
 - **Agent Window @ファイルメンション追加**:
   - **`webview/src/agentWindowMentions.ts` / `webview/src/AgentWindow.tsx`**: コンポーザーで `@` を入力するとワークスペース内ファイル候補を表示し、クリックまたはEnterで添付チップとして選択できるUIを追加
   - **`src/webview/agentWindowMentionContext.ts` / `src/webview/agentWindowPanel.ts`**: ファイル候補検索と送信時の本文添付をExtension Host側に追加。候補検索では本文を読まず、送信時のみ最大20万文字相当をプロンプト末尾へ添付する

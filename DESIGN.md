@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.7.0）
+## 3. 現在の実装状態（v0.8.0）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
