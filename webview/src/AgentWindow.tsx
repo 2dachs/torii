@@ -8,6 +8,7 @@ import {
 } from './agentWindowMentions';
 import { getPreviewUrlTarget } from './agentWindowPreview';
 import { applyAgentWindowMessage, type AgentWindowState } from './agentWindowState';
+import { beginNewAgentWindowTask } from './agentWindowTaskActions';
 import {
   agentWindowModelModes,
   getAgentWindowModelIntent,
@@ -114,7 +115,7 @@ export default function AgentWindow() {
   };
 
   const handleCreateTask = () => {
-    vscode?.postMessage({ command: 'createTask', title: '新規タスク' });
+    setState((current) => beginNewAgentWindowTask(current));
   };
 
   const handleOpenSettings = () => {
@@ -206,6 +207,10 @@ export default function AgentWindow() {
     vscode?.postMessage({ command: 'openFile', path: entry.path });
   };
 
+  const handleDeleteTask = (taskId: string) => {
+    vscode?.postMessage({ command: 'deleteTask', taskId });
+  };
+
   const handleFileTreeUp = () => {
     if (!fileTreePath) return;
     vscode?.postMessage({ command: 'loadFileTree', path: fileTreePath.split('/').slice(0, -1).join('/') });
@@ -261,15 +266,27 @@ export default function AgentWindow() {
           {state.tasks.length > 0 && (
             <div className="agent-window-task-list">
               {state.tasks.map((task) => (
-                <button
+                <div
                   key={task.id}
-                  type="button"
                   className={`agent-window-task ${task.id === state.activeTaskId ? 'is-active' : ''}`}
-                  onClick={() => handleSelectTask(task.id)}
                 >
-                  <span>{task.title}</span>
-                  <time>{formatTaskDate(task.updated_at)}</time>
-                </button>
+                  <button
+                    type="button"
+                    className="agent-window-task-open"
+                    onClick={() => handleSelectTask(task.id)}
+                  >
+                    <span>{task.title}</span>
+                    <time>{formatTaskDate(task.updated_at)}</time>
+                  </button>
+                  <button
+                    type="button"
+                    className="agent-window-task-delete"
+                    title="タスクを削除"
+                    onClick={() => handleDeleteTask(task.id)}
+                  >
+                    削除
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -284,7 +301,7 @@ export default function AgentWindow() {
         <header className="agent-window-header">
           <div>
             <p className="agent-window-kicker">Torii Agent</p>
-            <h2>{activeTask?.title ?? '大画面エージェント作業タブ'}</h2>
+            <h2>{activeTask?.title ?? '新規タスク'}</h2>
             <p className="agent-window-workspace-line" title={workspacePath}>
               {workspaceName}{workspacePath ? ` · ${workspacePath}` : ''}
             </p>

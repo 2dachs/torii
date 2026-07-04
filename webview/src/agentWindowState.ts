@@ -58,10 +58,11 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       };
     }
     const finished = event.type === 'done' || event.type === 'error';
+    const keepStreamingUntilHistoryReload = event.type === 'done' && !!state.activeTaskId;
     return {
       ...state,
       loading: finished ? false : state.loading,
-      streamingText: finished ? '' : state.streamingText,
+      streamingText: finished && !keepStreamingUntilHistoryReload ? '' : state.streamingText,
       agentEvents: [...state.agentEvents, event].slice(-30),
       nextCommands: event.type === 'done' && state.activeTaskId
         ? [{ command: 'loadChatHistory', taskId: state.activeTaskId }]

@@ -2,13 +2,14 @@ import * as http from 'http';
 import * as path from 'path';
 import * as fsSync from 'fs';
 import * as vscode from 'vscode';
-import { createTask, getChatHistory, getTasks } from '../backend/storage';
+import { createTask, deleteTask, getChatHistory, getTasks } from '../backend/storage';
 import { updateBudgetDisplay } from '../backend/statusBar';
 import { getCurrentWorkspaceId } from '../backend/workspace';
 import {
   EXTENSION_DISPLAY_NAME,
   MSG_AGENT_APPROVE,
   MSG_CREATE_TASK,
+  MSG_DELETE_TASK,
   MSG_LOAD_CHAT_HISTORY,
   MSG_LOAD_TASKS,
   MSG_SEND_MESSAGE,
@@ -109,6 +110,11 @@ export class AgentWindowPanel {
 
     if (message?.command === MSG_CREATE_TASK) {
       await this.handleCreateTask(message.title);
+      return;
+    }
+
+    if (message?.command === MSG_DELETE_TASK) {
+      await this.handleDeleteTask(message.taskId);
       return;
     }
 
@@ -225,6 +231,16 @@ export class AgentWindowPanel {
     });
     await this.sendTasks();
     await this.sendChatHistory(task.id);
+  }
+
+  private async handleDeleteTask(taskId?: string | null): Promise<void> {
+    if (!taskId) return;
+    await deleteTask(taskId);
+    await this.sendTasks();
+    await this.panel.webview.postMessage({
+      command: 'agentWindowTaskDeleted',
+      taskId,
+    });
   }
 
   private async sendFileTree(relativePath?: string | null): Promise<void> {

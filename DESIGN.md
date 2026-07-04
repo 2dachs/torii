@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.8.2）
+## 3. 現在の実装状態（v0.8.3）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
@@ -91,7 +91,7 @@
 - `@` メンション: 現在のファイル名を入力欄に挿入して参照可能
 - タスク管理UI: 検索・リネーム・削除をタスクリストから実行可能
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
-- **Agent Window Phase 1**: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを第1エディタグループに開き、サイドバーUIとは別のViteエントリ `agent-window.html` で3ペインの大画面エージェントUIを表示。タスク一覧・履歴表示・新規タスク作成・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・軽量ファイルツリー・localhostプレビュー・@ファイルメンションを既存backendへ接続済み。外部URLはSimple Browserへ逃がす
+- **Agent Window Phase 1**: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを第1エディタグループに開き、サイドバーUIとは別のViteエントリ `agent-window.html` で3ペインの大画面エージェントUIを表示。タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・タスク削除・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・軽量ファイルツリー・localhostプレビュー・@ファイルメンションを既存backendへ接続済み。外部URLはSimple Browserへ逃がす
 - **ストリーミング応答**: SSEによるリアルタイム表示
 - **初回オンボーディング**: 初回起動時にOllama開始 / 設定画面への導線を表示
 - **承認フロー**: コマンド実行・ファイル書き込み時のワンクリック承認UI

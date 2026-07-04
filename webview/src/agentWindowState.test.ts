@@ -107,6 +107,7 @@ test('applyAgentWindowMessage reloads active task history when an agent run fini
   );
 
   assert.equal(state.loading, false);
+  assert.equal(state.streamingText, 'answer');
   assert.deepEqual(state.nextCommands, [{ command: 'loadChatHistory', taskId: 'active-task' }]);
 });
 

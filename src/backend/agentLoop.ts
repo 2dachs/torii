@@ -4,6 +4,7 @@ import { ProviderId } from '../constants';
 import { ChatMessage } from './storage';
 import { buildSystemPrompt, buildClineTools } from './tools';
 import { sanitizeToolInputForAgentEvent, sanitizeToolOutputForAgentEvent } from './agentEventPayload';
+import { chooseAgentLoopReply } from './agentLoopReply';
 
 // ── イベント型（Extension Host → Webview へ転送される） ──
 
@@ -148,8 +149,13 @@ export async function runAgentLoop(params: AgentParams): Promise<AgentResult> {
 
   const { Agent } = await import('@cline/agents');
   const systemPrompt = await buildSystemPrompt(workspacePath, params.openEditorPath, params.openEditorContent);
-  const tools = await buildClineTools(workspacePath, autoApplyFiles, onEvent);
-  const { filter: filterThink, flush: flushThink } = makeThinkFilter(onEvent);
+  let visibleAssistantText = '';
+  const emitEvent = (event: AgentEvent) => {
+    if (event.type === 'text_delta') visibleAssistantText += event.text;
+    onEvent(event);
+  };
+  const tools = await buildClineTools(workspacePath, autoApplyFiles, emitEvent);
+  const { filter: filterThink, flush: flushThink } = makeThinkFilter(emitEvent);
 
   // 会話履歴を SDK の AgentMessage 形式に変換
   const initialMessages = history
@@ -283,8 +289,9 @@ export async function runAgentLoop(params: AgentParams): Promise<AgentResult> {
 
   try {
     const result = await agent.run(message);
+    const reply = chooseAgentLoopReply(result.outputText, finalReply, visibleAssistantText);
     return {
-      reply: result.outputText || finalReply || '(応答なし)',
+      reply,
       tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
       costUsd: result.usage.totalCost ?? totalCostUsd,
       costJpy: (result.usage.totalCost ?? totalCostUsd) * exchangeRate,

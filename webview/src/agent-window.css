@@ -276,6 +276,8 @@
 
 .agent-window-task {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 4px;
   width: 100%;
   min-height: 58px;
@@ -283,9 +285,6 @@
   border-radius: 8px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.03);
-  color: var(--irori-ink);
-  font: inherit;
-  text-align: left;
 }
 
 .agent-window-task.is-active {
@@ -293,7 +292,19 @@
   background: rgba(201, 169, 110, 0.12);
 }
 
-.agent-window-task span {
+.agent-window-task-open {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--irori-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.agent-window-task-open span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -303,6 +314,22 @@
 .agent-window-task time {
   color: var(--irori-muted);
   font-size: 11px;
+}
+
+.agent-window-task-delete {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--irori-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.agent-window-task-delete:hover,
+.agent-window-task-delete:focus {
+  color: var(--irori-gold);
+  outline: none;
 }
 
 .agent-window-budget {

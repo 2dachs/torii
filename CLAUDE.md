@@ -136,7 +136,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
 - 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/難易度/予算に応じてモデル自動切替
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
-- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・新規タスク作成・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンションまで接続済み。外部URLはVS Code Simple Browserへフォールバック
+- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・タスク削除・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンションまで接続済み。外部URLはVS Code Simple Browserへフォールバック
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - タスク管理: JSON永続化、チャット履歴の複数タスク管理
@@ -174,6 +174,13 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-04
+- **0.8.3 Agent Windowレビュー結果・タスク操作修正**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: Agent Windowのレビュー本文保持・自動タイトル復旧・タスク削除復旧の配布用にバージョン表記を `0.8.3` へ更新
+- **Agent Windowレビュー結果・タスク操作修正**:
+  - **`src/backend/agentLoopReply.ts` / `src/backend/agentLoop.ts`**: `attempt_completion` の短い完了要約で、ストリーミング中に表示された詳細レビュー本文が保存時に上書きされる問題を修正
+  - **`webview/src/AgentWindow.tsx` / `webview/src/agentWindowTaskActions.ts`**: Agent Windowの「新規タスク」は空タスクを即作成せず、次回送信時に `/api/agent` のAIタイトル自動生成ルートで作成する動きに戻す
+  - **`src/webview/agentWindowPanel.ts` / `webview/src/agent-window.css`**: Agent Window側にも `deleteTask` 中継とタスク削除UIを追加
+  - **`webview/src/agentWindowState.ts`**: Agent完了直後は履歴再読み込みが終わるまでストリーミング本文を保持し、結果表示が一瞬空になる状態を避ける
 - **0.8.2 Agent Windowレビュー停止感の改善**:
   - **`package.json` / `package-lock.json` / `DESIGN.md`**: Agent Window進行表示と内部REMINDER漏れ修正の配布用にバージョン表記を `0.8.2` へ更新
 - **Agent Window進行表示と内部REMINDER漏れ修正**:
