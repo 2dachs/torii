@@ -863,6 +863,33 @@ function App() {
           setCurrentToolName(null);
           setAgentSteps((prev) => prev.filter(e => e.type === 'file_change_applied' || e.type === 'file_change_undone'));
           break;
+        case 'agentRunBlocked': {
+          const owner = (msg as any).owner;
+          setLoading(false);
+          setShowQuickSwitch(false);
+          setIsStreaming(false);
+          setStreamingText('');
+          setAgentPhase(null);
+          setCurrentToolName(null);
+          setCurrentToolInput({});
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              workspace_id: '',
+              task_id: activeTaskId,
+              role: 'system',
+              content: owner === 'agentWindow'
+                ? 'このタスクはAgent Windowで実行中です。完了後にサイドバーから再実行できます。'
+                : 'このタスクは別の画面でAgent実行中です。完了後に再実行できます。',
+              tokens_used: 0,
+              cost_usd: 0,
+              cost_jpy: 0,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+          break;
+        }
         case 'chatDelta':
           if ((msg as any).text) {
             setIsStreaming(true);

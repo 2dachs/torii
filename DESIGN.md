@@ -91,6 +91,7 @@
 - `@` メンション: 現在のファイル名を入力欄に挿入して参照可能
 - タスク管理UI: 検索・リネーム・削除をタスクリストから実行可能
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
+- **Agent Window Phase 1**: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、サイドバーUIとは別のViteエントリ `agent-window.html` で3ペインの大画面エージェントUIを表示。タスク一覧・履歴表示・新規タスク作成・Agent送信・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・軽量ファイルツリー・localhostプレビュー・@ファイルメンションを既存backendへ接続済み。外部URLはSimple Browserへ逃がす
 - **ストリーミング応答**: SSEによるリアルタイム表示
 - **初回オンボーディング**: 初回起動時にOllama開始 / 設定画面への導線を表示
 - **承認フロー**: コマンド実行・ファイル書き込み時のワンクリック承認UI
@@ -143,6 +144,7 @@
 |------|--------|------|
 | 予算バーの計算が文字列パースに依存 | 解消済み | `webview/src/budget.js` に数値スナップショットを切り出し、`App.tsx` の予算表示を純関数化して解消 |
 | Expressセキュリティ（将来検討） | 低 | 現在は `127.0.0.1` バインドで外部アクセス不可。Extension Host直接実行への移行は中長期課題 |
+| Agent Window追加機能 | 中 | Agent Windowの基本操作、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンションは接続済み。OSSモデル推奨プリセット、ライセンスゲートは未実装 |
 
 ---
 

@@ -92,11 +92,16 @@ src/                          # VSCode拡張機能（Extension Host / Node.js）
       pettalConfig.ts         # .pettal 設定ファイル読み書き
   webview/
     provider.ts               # WebviewProvider（postMessage / SSE中継）
+    agentWindowPanel.ts        # エディタタブ型Agent Window（WebviewPanel）
+    webviewHtml.ts             # サイドバー/Agent Window共通のHTML・CSP生成
 
 webview/                      # React フロントエンド（Vite）
+  agent-window.html            # Agent Window用Viteエントリ
   src/
     App.tsx                   # メインUI（全状態管理、約1400行）
+    AgentWindow.tsx            # Agent Windowの3ペイン骨組みUI
     styles.css                # スタイル（Catppuccin Mocha準拠）
+    agent-window.css           # Agent Window専用スタイル
     types.ts                  # 型定義（AgentEvent等）
 ```
 
@@ -142,6 +147,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - Irori Web版 MVP着手: `irori-web/` に Next.js App Router + TypeScript + Tailwind CSS + Supabase 構成を新設。Googleログイン、認証後チャットUI、Settings、モード別モデル候補選択、Supabase RLS/Vault/Edge Functions の初期実装を追加
 - Irori 共有core: `packages/core/` に `estimateTokens` / `calculateCost` / `routeMessage` と型定義を切り出し、Web版から利用できるようにした
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
+- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。タスク一覧・履歴表示・新規タスク作成・Agent送信・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンションまで接続済み。外部URLはVS Code Simple Browserへフォールバック
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - タスク管理: JSON永続化、チャット履歴の複数タスク管理
@@ -172,10 +178,38 @@ npm run vscode:prepublish  # 両方まとめてビルド
 | コンテキストウィンドウ管理 | **実装済み** | `agentLoop.ts` に `getTokenLimit` / `estimateTokens` / `WARNING_THRESHOLD` を実装。上限の80%超で `context_warning` イベント送出、超過時は古いメッセージを自動削除 |
 | `token` キーワード誤検知 | **対処済み** | `router.ts` に除外ワードリストを実装。除外ワードが含まれる場合はプライバシールーティングをスキップする仕組みを追加済み |
 | Cline SDK移行 | **完了** | `agentLoop.ts` で `@cline/agents` を使用中。`Agent` クラスを動的インポートして利用している |
+| Agent Window追加機能 | **一部未実装** | WebviewPanel、Viteマルチエントリ、タスク/履歴/Agent送信/承認カード、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンションは接続済み。OSSモデル推奨プリセット、ライセンスゲートは未実装 |
 
 ---
 
 ## 修正・変更ログ
+
+### 2026-07-04
+- **Agent Window @ファイルメンション追加**:
+  - **`webview/src/agentWindowMentions.ts` / `webview/src/AgentWindow.tsx`**: コンポーザーで `@` を入力するとワークスペース内ファイル候補を表示し、クリックまたはEnterで添付チップとして選択できるUIを追加
+  - **`src/webview/agentWindowMentionContext.ts` / `src/webview/agentWindowPanel.ts`**: ファイル候補検索と送信時の本文添付をExtension Host側に追加。候補検索では本文を読まず、送信時のみ最大20万文字相当をプロンプト末尾へ添付する
+  - **`webview/src/agentWindowMentions.test.ts` / `src/webview/agentWindowMentionContext.test.ts` / `package.json`**: `@` クエリ抽出、チップ重複排除、候補payload整形、添付プロンプト生成の回帰テストを追加
+- **Agent Window localhostプレビュー追加**:
+  - **`webview/src/agentWindowPreview.ts` / `webview/src/agentWindowPreview.test.ts`**: ポート番号・localhost形式・http/https URLを正規化し、loopback URLだけiframe表示、外部URLはSimple Browser対象へ振り分ける純関数と回帰テストを追加
+  - **`webview/src/AgentWindow.tsx` / `webview/src/agent-window.css`**: 右ペインにPreviewタブを接続し、localhost開発サーバーをiframeで表示できる入力UIを追加。外部URLはWebview内に埋め込まず通知した上でExtension Hostへ渡す
+  - **`src/webview/agentWindowPanel.ts` / `src/webview/webviewHtml.ts`**: `openPreviewUrl` メッセージで `simpleBrowser.show` を呼び、失敗時は外部ブラウザへフォールバック。Webview CSPにlocalhost/127.0.0.1の `frame-src` を追加
+
+### 2026-07-03
+- **Agent Window Phase 1骨組み追加**:
+  - **`src/extension.ts` / `src/webview/agentWindowPanel.ts`**: `torii.openAgentWindow` コマンドを追加し、ユーザー操作として `ensureToriiStarted()` を通した後にエディタタブ型WebviewPanelを開く導線を追加。サイドバータイトルバーにも起動ボタンを表示
+  - **`src/webview/webviewHtml.ts` / `src/webview/provider.ts`**: サイドバーとAgent Windowで共通利用できるHTML/CSP/asset URI変換ヘルパーを追加し、既存Providerも同ヘルパーへ移行
+  - **`webview/vite.config.ts` / `webview/agent-window.html` / `webview/src/AgentWindow.tsx` / `webview/src/agent-window.css`**: Viteを `index.html` と `agent-window.html` のマルチエントリ化。irori-web系の暖色ダーク/金アクセントで3ペインのAgent Window骨組みを追加
+  - **`src/webview/webviewHtml.test.ts` / `package.json`**: Webview HTML生成の回帰テストと `test:webview-html` を追加
+- **Agent Window Phase 1接続拡張**:
+  - **`src/webview/agentWindowPanel.ts`**: Agent Window側で `loadTasks` / `loadChatHistory` / `createTask` / Agent `sendMessage` / `agentApprove` を処理し、既存storageと `/api/agent` / `/api/agent/approve` を流用するよう接続。Agentイベントは既存と同じくtext deltaを150ms、toolイベントを250msでバッチ化
+  - **`webview/src/AgentWindow.tsx` / `webview/src/agent-window.css`**: タスク一覧、履歴表示、新規タスク、Agent送信、基本進捗イベント、承認/拒否カードを表示・操作できるよう更新。IME変換中Enterは送信しない
+  - **`webview/src/agentWindowState.ts` / `webview/src/agentWindowApprovals.ts`**: Agent Window用の状態遷移と承認待ち抽出を純関数化
+  - **`webview/src/agentWindowState.test.ts` / `webview/src/agentWindowApprovals.test.ts` / `package.json`**: タスク選択、履歴同期、Agent text delta/done、auto-created task同期、承認待ち抽出の回帰テストを追加
+- **Agent Window二重実行排他とファイルツリー接続**:
+  - **`src/webview/agentRunRegistry.ts` / `src/webview/provider.ts` / `src/webview/agentWindowPanel.ts`**: 同一タスクのAgent実行オーナーを `sidebar` / `agentWindow` で管理し、同一タスクを別画面から二重実行しないようブロック。Agentがタスクを自動作成した場合はRegistryキーを新タスクIDへ移動する
+  - **`webview/src/App.tsx` / `webview/src/AgentWindow.tsx`**: ブロック時は実行中状態を解除し、どちらの画面で実行中かを表示。Agent Window側はインライン通知、サイドバー側はsystemメッセージで誘導する
+  - **`src/webview/fileTreePayload.ts` / `src/webview/agentWindowPanel.ts` / `webview/src/AgentWindow.tsx`**: 右ペインにワークスペース内ファイルツリーを表示。`node_modules` / `.git` / `dist` などを除外し、ディレクトリ移動とファイルクリックでエディタを開く操作に対応。絶対パスとワークスペース外realpathは拒否
+  - **`src/webview/agentRunRegistry.test.ts` / `src/webview/fileTreePayload.test.ts` / `package.json`**: 同一タスク排他、auto-created taskへのRegistry移動、ファイルツリーpayload整形の回帰テストを追加
 
 ### 2026-07-02
 - **0.7.0 過去チャット履歴でWebviewが即クラッシュする問題の根本修正**:

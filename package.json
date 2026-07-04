@@ -30,9 +30,6 @@
     "ollama",
     "local llm"
   ],
-  "activationEvents": [
-    "onView:torii-view"
-  ],
   "main": "./dist/ext/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -56,6 +53,11 @@
     },
     "commands": [
       {
+        "command": "torii.openAgentWindow",
+        "title": "Torii: Agent Windowを開く",
+        "icon": "$(window)"
+      },
+      {
         "command": "torii.openSettings",
         "title": "Open Torii Settings"
       },
@@ -76,6 +78,15 @@
         "title": "Torii: ローカルデータをバックアップ退避"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "torii.openAgentWindow",
+          "when": "view == torii-view",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Torii",
       "properties": {
@@ -380,18 +391,26 @@
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/ext/extension.js --external:vscode --platform=node --target=ES2022 --line-limit=120 --define:import.meta.url=__importMetaUrl \"--banner:js=const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" --watch",
     "build:webview": "cd webview && npm run build",
     "dev:webview": "cd webview && npm run dev",
-    "test": "npm run test:router && npm run test:diff-preview && npm run test:agent-event-payload && npm run test:agent-event-batch && npm run test:safe-shell && npm run test:reset-local-data && npm run test:openrouter-payload && npm run test:initial-data-gate && npm run test:task-payload && npm run test:webview-catalog && npm run test:agent-progress && npm run test:message-file-paths && npm run test:inline-markdown && npm run test:task-loading && npm run test:webview",
+    "test": "npm run test:router && npm run test:diff-preview && npm run test:agent-event-payload && npm run test:agent-event-batch && npm run test:safe-shell && npm run test:webview-html && npm run test:agent-run-registry && npm run test:file-tree-payload && npm run test:agent-window-mention-context && npm run test:reset-local-data && npm run test:openrouter-payload && npm run test:initial-data-gate && npm run test:task-payload && npm run test:webview-catalog && npm run test:agent-progress && npm run test:agent-window-state && npm run test:agent-window-approvals && npm run test:agent-window-preview && npm run test:agent-window-mentions && npm run test:message-file-paths && npm run test:inline-markdown && npm run test:task-loading && npm run test:webview",
     "test:router": "esbuild src/backend/lib/routerIntent.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-routerIntent.test.cjs --external:vscode && node --test /tmp/torii-routerIntent.test.cjs",
     "test:diff-preview": "esbuild src/backend/diffPreviewPolicy.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-diffPreviewPolicy.test.cjs && node --test /tmp/torii-diffPreviewPolicy.test.cjs",
     "test:agent-event-payload": "esbuild src/backend/agentEventPayload.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentEventPayload.test.cjs && node --test /tmp/torii-agentEventPayload.test.cjs",
     "test:agent-event-batch": "esbuild src/webview/agentEventBatch.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentEventBatch.test.cjs && node --test /tmp/torii-agentEventBatch.test.cjs",
     "test:safe-shell": "esbuild src/webview/safeShell.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-safeShell.test.cjs && node --test /tmp/torii-safeShell.test.cjs",
+    "test:webview-html": "esbuild src/webview/webviewHtml.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-webviewHtml.test.cjs --external:vscode && node --test /tmp/torii-webviewHtml.test.cjs",
+    "test:agent-run-registry": "esbuild src/webview/agentRunRegistry.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentRunRegistry.test.cjs && node --test /tmp/torii-agentRunRegistry.test.cjs",
+    "test:file-tree-payload": "esbuild src/webview/fileTreePayload.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-fileTreePayload.test.cjs && node --test /tmp/torii-fileTreePayload.test.cjs",
+    "test:agent-window-mention-context": "esbuild src/webview/agentWindowMentionContext.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentWindowMentionContext.test.cjs && node --test /tmp/torii-agentWindowMentionContext.test.cjs",
     "test:reset-local-data": "esbuild src/backend/resetLocalData.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-resetLocalData.test.cjs && node --test /tmp/torii-resetLocalData.test.cjs",
     "test:openrouter-payload": "esbuild src/webview/openRouterModelPayload.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-openRouterModelPayload.test.cjs && node --test /tmp/torii-openRouterModelPayload.test.cjs",
     "test:initial-data-gate": "esbuild src/webview/initialDataGate.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-initialDataGate.test.cjs && node --test /tmp/torii-initialDataGate.test.cjs",
     "test:task-payload": "esbuild src/webview/taskPayload.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-taskPayload.test.cjs && node --test /tmp/torii-taskPayload.test.cjs",
     "test:webview-catalog": "esbuild webview/src/openRouterCatalog.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-openRouterCatalog.test.cjs && node --test /tmp/torii-openRouterCatalog.test.cjs",
     "test:agent-progress": "esbuild webview/src/agentProgress.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentProgress.test.cjs && node --test /tmp/torii-agentProgress.test.cjs",
+    "test:agent-window-state": "esbuild webview/src/agentWindowState.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentWindowState.test.cjs && node --test /tmp/torii-agentWindowState.test.cjs",
+    "test:agent-window-approvals": "esbuild webview/src/agentWindowApprovals.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentWindowApprovals.test.cjs && node --test /tmp/torii-agentWindowApprovals.test.cjs",
+    "test:agent-window-preview": "esbuild webview/src/agentWindowPreview.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentWindowPreview.test.cjs && node --test /tmp/torii-agentWindowPreview.test.cjs",
+    "test:agent-window-mentions": "esbuild webview/src/agentWindowMentions.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-agentWindowMentions.test.cjs && node --test /tmp/torii-agentWindowMentions.test.cjs",
     "test:message-file-paths": "esbuild webview/src/messageFilePaths.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-messageFilePaths.test.cjs && node --test /tmp/torii-messageFilePaths.test.cjs",
     "test:inline-markdown": "esbuild webview/src/inlineMarkdown.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-inlineMarkdown.test.cjs && node --test /tmp/torii-inlineMarkdown.test.cjs",
     "test:task-loading": "esbuild webview/src/taskLoading.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/torii-taskLoading.test.cjs && node --test /tmp/torii-taskLoading.test.cjs",

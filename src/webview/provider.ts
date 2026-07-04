@@ -15,6 +15,8 @@ import { sanitizeOpenRouterModelsForWebview } from './openRouterModelPayload';
 import { InitialDataGate } from './initialDataGate';
 import { sanitizeTasksForWebview } from './taskPayload';
 import { AGENT_EVENT_BATCH_FLUSH_MS, AgentEventBatch, shouldBatchAgentEvent } from './agentEventBatch';
+import { buildWebviewHtml } from './webviewHtml';
+import { agentRunRegistry } from './agentRunRegistry';
 import {
   EXTENSION_DISPLAY_NAME,
   MSG_LOAD_TASKS,
@@ -181,45 +183,12 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   }
 
   private _getHtmlContent(webview: vscode.Webview): string {
-    const indexPath = path.join(this._context.extensionPath, 'dist', 'webview', 'index.html');
-    let html = fs.readFileSync(indexPath, 'utf-8');
-
-    // CSP メタタグを動的注入
-    // 全プロバイダーのAPIエンドポイント + Ollama ローカルエンドポイントを許可
-    const allEndpoints = new Set<string>();
-    for (const p of Object.values(PROVIDERS)) {
-      try {
-        allEndpoints.add(new URL(p.defaultEndpoint).origin);
-      } catch { /* URL パース失敗時はスキップ */ }
-    }
-    // Ollama のデフォルトエンドポイントも追加（localhost:11434）
-    allEndpoints.add('http://localhost:11434');
-
-    const providerEndpointsStr = [...allEndpoints].join(' ');
-
-    const csp = [
-      `default-src 'none';`,
-      `style-src ${webview.cspSource} http://localhost:* http://127.0.0.1:* 'unsafe-inline';`,
-      `script-src ${webview.cspSource} http://localhost:* http://127.0.0.1:*;`,
-      `connect-src http://localhost:* http://127.0.0.1:* ${providerEndpointsStr} https:;`,
-      `img-src ${webview.cspSource} https: data:;`,
-      `font-src ${webview.cspSource};`,
-      `media-src ${webview.cspSource} data:;`,
-    ].join(' ');
-
-    html = html.replace(
-      '<head>',
-      `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`
-    );
-
-    // webview.asWebviewUri 変換（dist/webview 内のアセットパス）
-    const distWebviewUri = webview.asWebviewUri(
-      vscode.Uri.file(path.join(this._context.extensionPath, 'dist', 'webview'))
-    );
-    html = html.replace(/(src|href)="\/([^"]+)"/g, `$1="${distWebviewUri}/$2"`);
-    html = html.replace(/(src|href)="\.\/([^"]+)"/g, `$1="${distWebviewUri}/$2"`);
-
-    return html;
+    return buildWebviewHtml({
+      webview,
+      extensionPath: this._context.extensionPath,
+      entryHtml: 'index.html',
+      resourceRootUri: vscode.Uri.file(path.join(this._context.extensionPath, 'dist', 'webview')),
+    });
   }
 
   private async _handleMessage(message: any) {
@@ -937,6 +906,15 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   /** エージェントモードでメッセージを送信（SSEストリーミング） */
   private async _handleAgentMessage(text: string, taskId?: string, modelIntent?: ModelIntent) {
     if (!this._view) return;
+    const runStart = agentRunRegistry.tryStart(taskId || null, 'sidebar');
+    if (!runStart.ok) {
+      this._view.webview.postMessage({
+        command: 'agentRunBlocked',
+        owner: runStart.owner,
+        taskId: taskId || null,
+      });
+      return;
+    }
     const workspaceId = this._getWorkspaceId();
 
     const payload = JSON.stringify({ message: text, workspaceId, taskId: taskId || null, ...(modelIntent ? { modelIntent } : {}) });
@@ -975,6 +953,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
       res.on('end', () => {
         this._flushAgentTextDelta();
         this._flushAgentEventBatch();
+        agentRunRegistry.finish(this._currentAgentTaskId, 'sidebar');
         this._agentReq = null;
         this._currentAgentTaskId = null;
         // SSE 終了後に予算表示を更新
@@ -985,6 +964,7 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
     this._agentReq.on('error', (e: Error) => {
       this._flushAgentTextDelta();
       this._flushAgentEventBatch();
+      agentRunRegistry.finish(this._currentAgentTaskId, 'sidebar');
       this._agentReq = null;
       this._currentAgentTaskId = null;
       if (e.message !== 'socket hang up') {
@@ -998,6 +978,10 @@ export class PettalPractitionerProvider implements vscode.WebviewViewProvider {
   /** SSEで受信したエージェントイベントをWebviewに転送 */
   private _handleAgentEvent(event: any) {
     if (!this._view) return;
+    if (event?.type === 'task_created' && typeof event.taskId === 'string') {
+      agentRunRegistry.move(this._currentAgentTaskId, event.taskId, 'sidebar');
+      this._currentAgentTaskId = event.taskId;
+    }
     if (event?.type === 'text_delta' && typeof event.text === 'string') {
       this._queueAgentTextDelta(event.text);
       return;

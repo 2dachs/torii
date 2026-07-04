@@ -8,6 +8,7 @@ import { runOllamaSetup } from './backend/ollamaSetup';
 import * as licenseManager from './backend/licenseManager';
 import { LEMONSQUEEZY_CHECKOUT_URL, CONFIG_SECTION, CONFIG_SECTION_LEGACY } from './constants';
 import { resetToriiLocalData } from './backend/resetLocalData';
+import { AgentWindowPanel } from './webview/agentWindowPanel';
 
 let provider: PettalPractitionerProvider | undefined;
 let runtime: ToriiRuntime | undefined;
@@ -107,6 +108,13 @@ export async function activate(context: vscode.ExtensionContext) {
   provider = new PettalPractitionerProvider(context, () => ensureToriiStarted(context));
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('torii-view', provider)
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('torii.openAgentWindow', async () => {
+      const toriiRuntime = await ensureToriiStarted(context);
+      AgentWindowPanel.open(context, toriiRuntime);
+    })
   );
 
   context.subscriptions.push(
