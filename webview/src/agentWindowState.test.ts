@@ -121,3 +121,28 @@ test('applyAgentWindowMessage clears loading when another surface owns the agent
   assert.equal(state.streamingText, '');
   assert.equal(state.blockedOwner, 'sidebar');
 });
+
+test('applyAgentWindowMessage stops loading and keeps partial output on requestCancelled', () => {
+  const state = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'task-1', loading: true, streamingText: '途中までの回答' }),
+    { command: 'requestCancelled' } as any,
+  );
+
+  assert.equal(state.loading, false);
+  assert.equal(state.streamingText, '途中までの回答');
+  assert.deepEqual(state.nextCommands, []);
+});
+
+test('applyAgentWindowMessage marks history as loading when switching tasks and clears it on arrival', () => {
+  const switched = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'missing' }),
+    { command: 'loadTasks', data: [task('a')] },
+  );
+  assert.equal(switched.historyLoading, true);
+
+  const loaded = applyAgentWindowMessage(
+    { ...switched, nextCommands: undefined } as any,
+    { command: 'loadChatHistory', data: [message('m1', 'a')] },
+  );
+  assert.equal(loaded.historyLoading, false);
+});

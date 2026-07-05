@@ -6,6 +6,13 @@ import {
   insertMentionToken,
   type MentionedFile,
 } from './agentWindowMentions';
+import {
+  beginDeleteConfirm,
+  cancelDeleteConfirm,
+  confirmDelete,
+  initialDeleteConfirmState,
+  type DeleteConfirmState,
+} from './agentWindowDeleteConfirm';
 import { getPreviewUrlTarget } from './agentWindowPreview';
 import { applyAgentWindowMessage, type AgentWindowState } from './agentWindowState';
 import { beginNewAgentWindowTask } from './agentWindowTaskActions';
@@ -17,6 +24,7 @@ import {
   type AgentWindowModelMode,
 } from './agentWindowModelMode';
 import { stripAgentInternalReminder } from './agentWindowMessageText';
+import { MarkdownContent } from './MarkdownContent';
 import { getAgentWindowProgressText } from './agentWindowProgress';
 import type { AgentEvent, ChatMessage, PendingApproval, VsCodeMessage } from './types';
 
@@ -47,6 +55,7 @@ export default function AgentWindow() {
   const [fileTreeEntries, setFileTreeEntries] = useState<FileTreeEntry[]>([]);
   const [fileTreeError, setFileTreeError] = useState<string | null>(null);
   const [rightPaneTab, setRightPaneTab] = useState<'files' | 'preview'>('files');
+  const [rightPaneOpen, setRightPaneOpen] = useState(false);
   const [previewInput, setPreviewInput] = useState('3000');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
@@ -55,6 +64,7 @@ export default function AgentWindow() {
   const [mentionCandidates, setMentionCandidates] = useState<FileMentionEntry[]>([]);
   const [mentionError, setMentionError] = useState<string | null>(null);
   const [mentionedFiles, setMentionedFiles] = useState<MentionedFile[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(initialDeleteConfirmState);
   const [state, setState] = useState<AgentWindowState>({
     tasks: [],
     activeTaskId: null,
@@ -110,7 +120,7 @@ export default function AgentWindow() {
   const activeTask = state.tasks.find((task) => task.id === state.activeTaskId) ?? null;
 
   const handleSelectTask = (taskId: string) => {
-    setState((current) => ({ ...current, activeTaskId: taskId, messages: [] }));
+    setState((current) => ({ ...current, activeTaskId: taskId, messages: [], historyLoading: true }));
     vscode?.postMessage({ command: 'loadChatHistory', taskId });
   };
 
@@ -190,6 +200,10 @@ export default function AgentWindow() {
     events: state.agentEvents,
   });
 
+  const handleCancelAgent = () => {
+    vscode?.postMessage({ command: 'cancelAgent' });
+  };
+
   const handleApproval = (approval: PendingApproval, approved: boolean) => {
     setResolvedApprovalIds((current) => new Set(current).add(approval.id));
     vscode?.postMessage({
@@ -208,7 +222,11 @@ export default function AgentWindow() {
   };
 
   const handleDeleteTask = (taskId: string) => {
-    vscode?.postMessage({ command: 'deleteTask', taskId });
+    const { next, shouldDelete } = confirmDelete(deleteConfirm, taskId);
+    setDeleteConfirm(next);
+    if (shouldDelete) {
+      vscode?.postMessage({ command: 'deleteTask', taskId });
+    }
   };
 
   const handleFileTreeUp = () => {
@@ -258,7 +276,10 @@ export default function AgentWindow() {
           <strong>{workspaceName}</strong>
           {workspacePath && <small title={workspacePath}>{workspacePath}</small>}
         </section>
-        <button className="agent-window-primary-button" type="button" onClick={handleCreateTask}>新規タスク</button>
+        <button className="agent-window-primary-button" type="button" onClick={handleCreateTask} title="新規タスク">
+          <span className="agent-window-button-icon" aria-hidden="true">＋</span>
+          <span className="agent-window-button-label">新規タスク</span>
+        </button>
         <section className="agent-window-section">
           <h2>Tasks</h2>
           {state.tasksLoading && <div className="agent-window-empty">読み込み中</div>}
@@ -278,22 +299,25 @@ export default function AgentWindow() {
                     <span>{task.title}</span>
                     <time>{formatTaskDate(task.updated_at)}</time>
                   </button>
-                  <button
-                    type="button"
-                    className="agent-window-task-delete"
-                    title="タスクを削除"
-                    onClick={() => handleDeleteTask(task.id)}
-                  >
-                    削除
-                  </button>
+                  {deleteConfirm.pendingTaskId === task.id ? (
+                    <div className="agent-window-task-confirm" role="group" aria-label={`「${task.title}」を削除しますか`}>
+                      <button type="button" className="is-danger" onClick={() => handleDeleteTask(task.id)}>削除する</button>
+                      <button type="button" onClick={() => setDeleteConfirm(cancelDeleteConfirm())}>キャンセル</button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="agent-window-task-delete"
+                      title="タスクを削除（履歴も削除されます）"
+                      onClick={() => setDeleteConfirm(beginDeleteConfirm(task.id))}
+                    >
+                      削除
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
           )}
-        </section>
-        <section className="agent-window-budget">
-          <span>Budget</span>
-          <strong>接続待ち</strong>
         </section>
       </aside>
 
@@ -322,6 +346,15 @@ export default function AgentWindow() {
               ))}
             </div>
             <button type="button" className="agent-window-secondary-button" onClick={handleOpenSettings}>設定</button>
+            <button
+              type="button"
+              className="agent-window-secondary-button agent-window-right-pane-toggle"
+              aria-expanded={rightPaneOpen}
+              aria-label={rightPaneOpen ? 'ファイル・プレビューパネルを閉じる' : 'ファイル・プレビューパネルを開く'}
+              onClick={() => setRightPaneOpen((value) => !value)}
+            >
+              ◧
+            </button>
             <div className="agent-window-status">
               {state.blockedOwner === 'sidebar' ? 'サイドバーで実行中' : serverPort ? `Backend :${serverPort}` : 'Backend 接続中'}
             </div>
@@ -344,10 +377,15 @@ export default function AgentWindow() {
         )}
 
         <section className="agent-window-thread" aria-label="Agent conversation">
-          {state.messages.length === 0 ? (
+          {state.historyLoading && state.messages.length === 0 ? (
             <article className="agent-window-message agent-window-message-assistant">
               <p className="agent-window-message-meta">Torii</p>
-              <p>タスクを選ぶと履歴を表示します。Agent送信、進捗、承認カードは次に接続します。</p>
+              <p>履歴を読み込み中…</p>
+            </article>
+          ) : state.messages.length === 0 ? (
+            <article className="agent-window-message agent-window-message-assistant">
+              <p className="agent-window-message-meta">Torii</p>
+              <p>タスクを選ぶか、下の入力欄からエージェントへの依頼を送信してください。</p>
             </article>
           ) : (
             <>
@@ -392,7 +430,13 @@ export default function AgentWindow() {
           {mentionedFiles.length > 0 && (
             <div className="agent-window-attachment-row" aria-label="Mentioned files">
               {mentionedFiles.map((file) => (
-                <button key={file.path} type="button" className="agent-window-attachment-chip" onClick={() => handleMentionRemove(file.path)}>
+                <button
+                  key={file.path}
+                  type="button"
+                  className="agent-window-attachment-chip"
+                  aria-label={`@${file.name} を添付から外す`}
+                  onClick={() => handleMentionRemove(file.path)}
+                >
                   <span>@{file.name}</span>
                   <span aria-hidden="true">x</span>
                 </button>
@@ -414,20 +458,23 @@ export default function AgentWindow() {
           <textarea
             placeholder="エージェントへの依頼を入力"
             value={input}
-            disabled={state.loading}
             onChange={(event) => updateComposerInput(event.target.value)}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
             onKeyDown={handleComposerKeyDown}
           />
           <div className="agent-window-composer-row">
-            <span>{state.loading ? 'Agent実行中' : 'Enterで送信 / Shift+Enterで改行'}</span>
-            <button type="button" disabled={!input.trim() || state.loading} onClick={handleSendAgent}>送信</button>
+            <span>{state.loading ? 'Agent実行中（次の依頼を入力できます）' : 'Enterで送信 / Shift+Enterで改行'}</span>
+            {state.loading ? (
+              <button type="button" className="agent-window-stop-button" onClick={handleCancelAgent}>停止</button>
+            ) : (
+              <button type="button" disabled={!input.trim()} onClick={handleSendAgent}>送信</button>
+            )}
           </div>
         </footer>
       </section>
 
-      <aside className="agent-window-right-pane">
+      <aside className={`agent-window-right-pane ${rightPaneOpen ? 'is-open' : ''}`}>
         <div className="agent-window-tabs">
           <button className={rightPaneTab === 'files' ? 'is-active' : ''} type="button" onClick={() => setRightPaneTab('files')}>Files</button>
           <button className={rightPaneTab === 'preview' ? 'is-active' : ''} type="button" onClick={() => setRightPaneTab('preview')}>Preview</button>
@@ -525,7 +572,7 @@ function AgentMessage({ message }: { message: ChatMessage }) {
       <p className="agent-window-message-meta">
         {isUser ? 'You' : 'Torii'} · {formatTaskDate(message.created_at)}
       </p>
-      <p>{content}</p>
+      {isUser ? <p>{content}</p> : <MarkdownContent content={content} />}
     </article>
   );
 }

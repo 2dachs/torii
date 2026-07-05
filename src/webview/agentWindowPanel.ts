@@ -128,6 +128,11 @@ export class AgentWindowPanel {
       return;
     }
 
+    if (message?.command === 'cancelAgent') {
+      this.handleCancelAgent();
+      return;
+    }
+
     if (message?.command === 'loadFileTree') {
       await this.sendFileTree(message.path);
       return;
@@ -494,6 +499,38 @@ export class AgentWindowPanel {
 
     this.flushAgentEventBatch();
     void this.panel.webview.postMessage({ command: 'agentEvent', event });
+  }
+
+  private handleCancelAgent(): void {
+    this.flushAgentTextDelta();
+    this.flushAgentEventBatch();
+    if (this.agentReq) {
+      this.agentReq.destroy();
+      this.agentReq = null;
+    }
+    // req.destroy() の error ハンドラは次tickで走り currentAgentTaskId が既にnullのため、
+    // Registry解放はここで捕捉したtaskIdに対して行う
+    const taskId = this.currentAgentTaskId;
+    this.currentAgentTaskId = null;
+    agentRunRegistry.finish(taskId, 'agentWindow');
+    if (taskId) {
+      const payload = JSON.stringify({ taskId });
+      const req = http.request({
+        hostname: 'localhost',
+        port: this.runtime.port,
+        path: '/api/agent/cancel',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'x-torii-token': this.runtime.token,
+        },
+      }, (res: any) => { res.resume(); });
+      req.on('error', () => {});
+      req.write(payload);
+      req.end();
+    }
+    void this.panel.webview.postMessage({ command: 'requestCancelled' });
   }
 
   private async handleAgentApprove(id?: string, approved?: boolean): Promise<void> {

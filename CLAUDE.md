@@ -136,7 +136,8 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - 為替レート: 自動取得（1時間キャッシュ）+ 手動設定フォールバック
 - 自動ルーティング（PromptRouter）: プライバシー/セキュリティ/難易度/予算に応じてモデル自動切替
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
-- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・タスク削除・Agent送信・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンションまで接続済み。外部URLはVS Code Simple Browserへフォールバック
+- Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・確認付きタスク削除・Agent送信・実行中の停止ボタン・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンション・完了メッセージのMarkdown描画まで接続済み。外部URLはVS Code Simple Browserへフォールバック。980px以下は左ペインをアイコン化し右ペインはヘッダートグルでオーバーレイ表示
+- UI品質（0.8.4）: サイドバーのmutedテキスト色をWCAG AA準拠へ変更・最小フォント11px・日本語フォントスタック指定・`:focus-visible` フォーカスリング・アイコンボタンへの `aria-label` 付与
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
 - タスク管理: JSON永続化、チャット履歴の複数タスク管理
@@ -172,6 +173,29 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ---
 
 ## 修正・変更ログ
+
+### 2026-07-05
+- **0.8.4 UI/UXレビュー対応（ナビゲーション・視認性・アクセシビリティ）**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: バージョン表記を `0.8.4` へ更新。タスク管理用に `TASKS.md` を追加
+- **Agent Window: 実行中の停止ボタンと入力欄有効化**:
+  - **`src/webview/agentWindowPanel.ts`**: `cancelAgent` ハンドラを追加。SSEリクエスト destroy + `POST /api/agent/cancel`（provider.ts の `_handleCancelAgent` と同経路）でAbortControllerを発火し、`requestCancelled` をWebviewへ返す。Registry解放はdestroy後のerrorハンドラではtaskIdが失われるため、キャンセル時点で捕捉したtaskIdに対して行う
+  - **`webview/src/AgentWindow.tsx` / `webview/src/agentWindowState.ts`**: 実行中は送信ボタンを「停止」に切替え、textareaのdisabledを廃止（Enter送信のみブロック）。`requestCancelled` でloading解除・途中出力は保持
+- **Agent Window: タスク削除の確認UI**:
+  - **`webview/src/agentWindowDeleteConfirm.ts` / `webview/src/AgentWindow.tsx` / `webview/src/agent-window.css`**: 「削除」1クリック目でインライン確認（削除する / キャンセル）に切替え、2クリック目で実削除。`--irori-danger` 変数を追加
+- **Agent Window: 狭幅レイアウト刷新（font-size:0 ハック廃止）**:
+  - **`webview/src/agent-window.css` / `webview/src/AgentWindow.tsx`**: 980px以下は左ペインを72pxアイコン列化（＋=新規タスク、テキスト系は `display: none` でタブ順からも除外）。右ペインは `display: none` 固定をやめ、ヘッダーの `◧` トグル（`aria-expanded` 付き）でオーバーレイ表示
+  - **`webview/src/agent-window.css`**: メンションpopoverの `bottom: 142px` 固定をcomposer相対の `bottom: calc(100% + 6px)` へ修正。Previewタブの `min-height: calc(100vh - 96px)` を廃止し右ペインflex化で二重スクロールを解消
+- **Agent Window: Markdown描画**:
+  - **`webview/src/markdownBlocks.ts` / `webview/src/MarkdownContent.tsx`**: `parseMarkdownBlocks` / `renderInlineMarkdown` / `MarkdownContent` をApp.tsxから共有モジュールへ切り出し（挙動不変）
+  - **`webview/src/AgentWindow.tsx` / `webview/src/agent-window.css`**: 完了済みassistantメッセージをMarkdown描画（ストリーミング中はプレーン維持、0.6.4方針踏襲）。`.md-*` スタイルをirori配色で追加
+- **Agent Window: 文言・死んだUIの整理**:
+  - **`webview/src/AgentWindow.tsx` / `webview/src/agentWindowState.ts`**: 空状態文言を行動喚起型へ変更、未接続のBudget「接続待ち」セクションを削除、履歴読み込み中は「履歴を読み込み中…」を表示（`historyLoading` フラグ）
+- **サイドバーUI: コントラスト・フォント・アクセシビリティ**:
+  - **`webview/src/styles.css`**: `--text-muted` を `#6c7086`（3.4:1でAA未達）→ `#8288a5`（全背景で4.5:1以上）へ変更。`font-size: 10px` を全廃し最小11pxへ。日本語フォントスタック（Hiragino Sans / Noto Sans JP / Yu Gothic UI / Meiryo）を追加。`:focus-visible` フォーカスリングを追加
+  - **`webview/src/App.tsx`**: 絵文字アイコンボタン（⚙️/🗑️/＋/🖼️/📝/🔄/⏹ 等）へ `aria-label`、進行表示へ `role="status"` + `aria-live="polite"`、承認カードへ `role="region"` を付与
+  - **`webview/src/agent-window.css`**: `:focus-visible` リング追加・`.agent-window-task-delete:focus { outline: none }` を削除。日本語フォントスタックを追加
+- **テスト追加**:
+  - **`webview/src/agentWindowDeleteConfirm.test.ts` / `webview/src/markdownBlocks.test.ts` / `webview/src/agentWindowState.test.ts` / `package.json`**: 削除確認遷移、Markdownブロックパース（0.7.0でハングした `[REMINDER: ...]` 系入力含む）、`requestCancelled` / `historyLoading` の回帰テストを追加（計82テスト成功）
 
 ### 2026-07-04
 - **0.8.3 Agent Windowレビュー結果・タスク操作修正**:

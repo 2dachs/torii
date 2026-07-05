@@ -12,6 +12,7 @@ export interface AgentWindowState {
   streamingText: string;
   agentEvents: AgentEvent[];
   blockedOwner?: AgentRunOwner | null;
+  historyLoading?: boolean;
 }
 
 export type AgentWindowCommand =
@@ -36,6 +37,14 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       loading: false,
       streamingText: '',
       blockedOwner: (message as any).owner,
+      nextCommands: [],
+    };
+  }
+
+  if (message.command === 'requestCancelled') {
+    return {
+      ...state,
+      loading: false,
       nextCommands: [],
     };
   }
@@ -86,6 +95,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       messages: [],
       streamingText: '',
       agentEvents: [],
+      historyLoading: true,
       nextCommands: [],
     };
   }
@@ -103,6 +113,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       tasksLoading: false,
       streamingText: activeTaskId === state.activeTaskId ? state.streamingText : '',
       agentEvents: activeTaskId === state.activeTaskId ? state.agentEvents : [],
+      historyLoading: activeTaskId && activeTaskId !== state.activeTaskId ? true : state.historyLoading,
       nextCommands: activeTaskId && activeTaskId !== state.activeTaskId
         ? [{ command: 'loadChatHistory', taskId: activeTaskId }]
         : [],
@@ -115,6 +126,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       messages: message.data,
       streamingText: '',
       agentEvents: [],
+      historyLoading: false,
       nextCommands: [],
     };
   }

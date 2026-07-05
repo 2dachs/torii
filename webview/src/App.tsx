@@ -1,5 +1,4 @@
 import { memo, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { ReactNode } from 'react';
 import type { Task, ChatMessage, ApiResponse, VsCodeMessage, ProviderSettings, ServerConfig, Attachment, ModelDef, FileContent, AgentMode, ModelIntent, AgentEvent, PendingApproval, RoutingRule, ModelLimit, SessionModelStat, LicenseStatus } from './types';
 import { MSG_EDITOR_CONTENT, MSG_READ_FILES, MSG_WRITE_FILE, MSG_FILE_CONTENTS, MSG_AGENT_APPROVE, MSG_UNDO_FILE_CHANGE, MSG_UPDATE_MODEL_CONFIG, MSG_LOAD_ROUTING_RULES, MSG_SAVE_ROUTING_RULE, MSG_DELETE_ROUTING_RULE, MSG_LOAD_PETTAL_CONFIG, MSG_SAVE_PETTAL_CONFIG, MSG_GET_MODEL_USAGE, MSG_MODEL_USAGE_DATA, MSG_SETUP_OLLAMA, MSG_ACTIVATE_LICENSE, MSG_LICENSE_STATUS, MSG_RENAME_TASK, MSG_DELETE_TASK } from '../../src/constants';
 import { buildBudgetMeterState } from './budget.js';
@@ -7,7 +6,7 @@ import { getVisibleOpenRouterModels } from './openRouterCatalog';
 import { shouldRequestTasksOnToggle } from './taskLoading';
 import { appendVisibleAgentSteps, summarizeToolInputForUi } from './agentProgress';
 import { extractMessageFilePaths } from './messageFilePaths';
-import { tokenizeInlineMarkdown } from './inlineMarkdown';
+import { MarkdownContent } from './MarkdownContent';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -125,13 +124,6 @@ function formatDiffLines(lines: string[], startLine: number, prefix: string): st
     .join('\n');
 }
 
-type MarkdownBlock =
-  | { type: 'heading'; level: 1 | 2 | 3; text: string }
-  | { type: 'paragraph'; text: string }
-  | { type: 'list'; ordered: boolean; items: string[] }
-  | { type: 'quote'; text: string }
-  | { type: 'code'; lang: string; code: string };
-
 type OpenRouterCatalogModel = {
   id: string;
   name: string;
@@ -146,121 +138,6 @@ type OpenRouterCatalogModel = {
   };
 };
 
-function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  return tokenizeInlineMarkdown(text).map((token, i) => {
-    const key = `${keyPrefix}-${token.type}-${i}`;
-    switch (token.type) {
-      case 'link':
-        return (
-          <a key={key} href={token.href} target="_blank" rel="noreferrer">
-            {token.label}
-          </a>
-        );
-      case 'code':
-        return <code key={key}>{token.text}</code>;
-      case 'strong':
-        return <strong key={key}>{token.text}</strong>;
-      case 'em':
-        return <em key={key}>{token.text}</em>;
-      default:
-        return token.text;
-    }
-  });
-}
-
-function parseMarkdownBlocks(content: string): MarkdownBlock[] {
-  const lines = content.replace(/\r\n/g, '\n').split('\n');
-  const blocks: MarkdownBlock[] = [];
-  let i = 0;
-
-  const flushParagraph = (buffer: string[]) => {
-    if (buffer.length > 0) {
-      blocks.push({ type: 'paragraph', text: buffer.join(' ') });
-      buffer.length = 0;
-    }
-  };
-
-  const paragraphBuffer: string[] = [];
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      flushParagraph(paragraphBuffer);
-      i += 1;
-      continue;
-    }
-
-    const fence = trimmed.match(/^```([\w+-]*)\s*$/);
-    if (fence) {
-      flushParagraph(paragraphBuffer);
-      const lang = fence[1] || '';
-      i += 1;
-      const codeLines: string[] = [];
-      while (i < lines.length && !lines[i].trim().startsWith('```')) {
-        codeLines.push(lines[i]);
-        i += 1;
-      }
-      if (i < lines.length && lines[i].trim().startsWith('```')) i += 1;
-      blocks.push({ type: 'code', lang, code: codeLines.join('\n') });
-      continue;
-    }
-
-    const heading = trimmed.match(/^(#{1,3})\s+(.*)$/);
-    if (heading) {
-      flushParagraph(paragraphBuffer);
-      blocks.push({ type: 'heading', level: heading[1].length as 1 | 2 | 3, text: heading[2] });
-      i += 1;
-      continue;
-    }
-
-    const quote = trimmed.match(/^>\s?(.*)$/);
-    if (quote) {
-      flushParagraph(paragraphBuffer);
-      const quoteLines = [quote[1]];
-      i += 1;
-      while (i < lines.length) {
-        const next = lines[i].trim();
-        if (!next.startsWith('>')) break;
-        quoteLines.push(next.replace(/^>\s?/, ''));
-        i += 1;
-      }
-      blocks.push({ type: 'quote', text: quoteLines.join('\n') });
-      continue;
-    }
-
-    const listItem = trimmed.match(/^([-*+])\s+(.*)$/) || trimmed.match(/^\d+\.\s+(.*)$/);
-    if (listItem) {
-      flushParagraph(paragraphBuffer);
-      const ordered = /^\d+\./.test(trimmed);
-      const items: string[] = [ordered ? (trimmed.match(/^\d+\.\s+(.*)$/)?.[1] || '') : (listItem[2] || '')];
-      i += 1;
-      while (i < lines.length) {
-        const next = lines[i].trim();
-        if (ordered) {
-          const m = next.match(/^\d+\.\s+(.*)$/);
-          if (!m) break;
-          items.push(m[1]);
-        } else {
-          const m = next.match(/^[-*+]\s+(.*)$/);
-          if (!m) break;
-          items.push(m[1]);
-        }
-        i += 1;
-      }
-      blocks.push({ type: 'list', ordered, items });
-      continue;
-    }
-
-    paragraphBuffer.push(trimmed);
-    i += 1;
-  }
-
-  flushParagraph(paragraphBuffer);
-  return blocks;
-}
-
 function StreamingTextContent({ content, className = '' }: { content: string; className?: string }) {
   return (
     <div className={`markdown-content ${className}`.trim()}>
@@ -270,68 +147,6 @@ function StreamingTextContent({ content, className = '' }: { content: string; cl
     </div>
   );
 }
-
-const MarkdownContent = memo(function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
-  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
-
-  return (
-    <div className={`markdown-content ${className}`.trim()}>
-      {blocks.map((block, index) => {
-        if (block.type === 'heading') {
-          const Tag = `h${block.level}` as const;
-          return (
-            <Tag key={`${block.type}-${index}`} className={`md-heading level-${block.level}`}>
-              {renderInlineMarkdown(block.text, `${block.type}-${index}`)}
-            </Tag>
-          );
-        }
-        if (block.type === 'paragraph') {
-          return (
-            <p key={`${block.type}-${index}`} className="md-paragraph">
-              {renderInlineMarkdown(block.text, `${block.type}-${index}`)}
-            </p>
-          );
-        }
-        if (block.type === 'quote') {
-          return (
-            <blockquote key={`${block.type}-${index}`} className="md-blockquote">
-              {block.text.split('\n').map((line, lineIndex) => (
-                <p key={lineIndex}>{renderInlineMarkdown(line, `${block.type}-${index}-${lineIndex}`)}</p>
-              ))}
-            </blockquote>
-          );
-        }
-        if (block.type === 'list') {
-          const ListTag = block.ordered ? 'ol' : 'ul';
-          return (
-            <ListTag key={`${block.type}-${index}`} className="md-list">
-              {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInlineMarkdown(item, `${block.type}-${index}-${itemIndex}`)}</li>
-              ))}
-            </ListTag>
-          );
-        }
-        return (
-          <div key={`${block.type}-${index}`} className="md-code-block">
-            <div className="md-code-header">
-              <span>{block.lang || 'text'}</span>
-              <button
-                className="md-code-copy-btn"
-                onClick={() => navigator.clipboard.writeText(block.code)}
-                title="コードをコピー"
-              >
-                コピー
-              </button>
-            </div>
-            <pre className="md-code-pre">
-              <code>{block.code || ' '}</code>
-            </pre>
-          </div>
-        );
-      })}
-    </div>
-  );
-});
 
 type MessageItemProps = {
   msg: ChatMessage;
@@ -403,6 +218,7 @@ const MessageItem = memo(function MessageItem({
           className={`copy-btn${isCopied ? ' copied' : ''}`}
           onClick={() => onCopy(msg.id, msg.content)}
           title="コピー"
+          aria-label="メッセージをコピー"
         >
           {isCopied ? '✓' : '⎘'}
         </button>
@@ -1844,10 +1660,10 @@ function App() {
           <span>{title}</span>
         </div>
         <div className="app-header-actions">
-          <button className="icon-btn" title="Settings" onClick={handleOpenSettings}>
+          <button className="icon-btn" title="Settings" aria-label="設定を開く" onClick={handleOpenSettings}>
             ⚙️
           </button>
-          <button className="icon-btn" title="Clear Chat History" onClick={handleClearHistory}>
+          <button className="icon-btn" title="Clear Chat History" aria-label="チャット履歴をすべて削除" onClick={handleClearHistory}>
             🗑️
           </button>
         </div>
@@ -1870,6 +1686,7 @@ function App() {
             <button
               className="icon-btn task-add-btn"
               title="新しいチャットを開始（タスク名は最初のメッセージから自動生成）"
+              aria-label="新しいチャットを開始"
               onClick={handleNewChat}
             >
               ＋
@@ -2070,7 +1887,7 @@ function App() {
               const toolLabel = gitLbl || TOOL_JAPANESE_NAMES[currentToolName || ''] || currentToolName || '';
               const toolIcon = isGit ? '🌿' : (TOOL_ICONS[currentToolName || ''] || '🔧');
               return (
-                <div className={`agent-phase-bar${
+                <div role="status" aria-live="polite" className={`agent-phase-bar${
                   agentPhase === 'thinking' ? ' thinking' :
                   agentPhase === 'executing' ? ` executing cat-${effCat}` :
                   agentPhase === 'waiting' ? ' waiting' : ''
@@ -2149,7 +1966,7 @@ function App() {
               </div>
             )}
             {!streamingText && !agentPhase && (
-              <div className="loading-dots">🤖 エージェントが起動しています...</div>
+              <div className="loading-dots" role="status" aria-live="polite">🤖 エージェントが起動しています...</div>
             )}
           </div>
         )}
@@ -2158,7 +1975,7 @@ function App() {
         {/* ── 通常ローディング（チャットモード） ── */}
         {loading && agentMode === 'chat' && (
           <div className="loading-area">
-            <div className="agent-phase-bar thinking">
+            <div className="agent-phase-bar thinking" role="status" aria-live="polite">
               <span className="phase-label thinking">🤔 考え中<span className="thinking-dots"><span className="dot">.</span><span className="dot">.</span><span className="dot">.</span></span></span>
               {processingStatus && (
                 <span className="chat-loading-badge">
@@ -2199,6 +2016,7 @@ function App() {
           className="icon-btn budget-settings-btn"
           onClick={handleOpenSettings}
           title="予算設定を開く"
+          aria-label="予算設定を開く"
         >
           ⚙️
         </button>
@@ -2303,7 +2121,7 @@ function App() {
                   <img src={`data:${att.mimeType || 'image/png'};base64,${att.data}`} alt={att.name} />
                 </div>
                 <span className="attachment-thumb-name">{att.name}</span>
-                <button className="attachment-remove" onClick={() => handleRemoveAttachment(idx)}>×</button>
+                <button className="attachment-remove" aria-label={`${att.name} を添付から外す`} onClick={() => handleRemoveAttachment(idx)}>×</button>
               </div>
             ))}
         </div>
@@ -2311,7 +2129,7 @@ function App() {
 
       {/* ── 承認カード（run_command / write_file） ── */}
       {pendingApprovals.map((approval) => (
-        <div key={approval.id} className="approval-card">
+        <div key={approval.id} className="approval-card" role="region" aria-label="承認待ちの操作">
           {approval.tool === 'run_command' && (
             <>
               <div className="approval-header">🔧 コマンドを実行しますか？</div>
@@ -2416,6 +2234,7 @@ function App() {
                 }
                 onClick={handleAttachImage}
                 disabled={loading}
+                aria-label="画像を添付"
               >
                 🖼️{!supportsImages && geminiHasKey && <span className="gemini-bridge-dot" title="Gemini橋渡し">G</span>}
               </button>
@@ -2423,6 +2242,7 @@ function App() {
             <button
               className={`icon-btn input-action-btn ${showEditorContext ? 'active' : ''}`}
               title={showEditorContext ? 'エディタ内容を添付中' : 'エディタ内容を添付'}
+              aria-label={showEditorContext ? 'エディタ内容の添付を解除' : 'エディタ内容を添付'}
               onClick={handleToggleEditorContext}
               disabled={loading}
             >
@@ -2431,6 +2251,7 @@ function App() {
             <button
               className={`icon-btn input-action-btn ${showQuickSwitch ? 'active' : ''}`}
               title="プロバイダー切替"
+              aria-label="プロバイダー切替"
               onClick={() => setShowQuickSwitch(prev => !prev)}
               disabled={loading}
             >
@@ -2479,7 +2300,7 @@ function App() {
           onCompositionEnd={() => { isComposingRef.current = false; }}
         />
         {loading ? (
-          <button className="send-btn cancel-btn" onClick={handleCancel}>
+          <button className="send-btn cancel-btn" aria-label="実行を停止" title="実行を停止" onClick={handleCancel}>
             ⏹
           </button>
         ) : (
