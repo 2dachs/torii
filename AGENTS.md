@@ -186,6 +186,9 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-05
+- **Agent Window: 完了後の回答表示同期修正**:
+  - **`src/webview/agentWindowPanel.ts` / `webview/src/agentWindowState.ts`**: `done` イベントがassistantメッセージ保存より先に届き、Agent Windowが保存前の履歴を読み込んで回答が消えたように見える競合を修正。SSE終了後、通常完了した実行だけ `agentRunEnded` で保存後履歴を再同期する
+  - **`webview/src/agentWindowState.test.ts`**: `agentRunEnded` 受信時にアクティブタスク履歴を再読み込みする回帰テストを追加
 - **0.8.4 UI/UXレビュー対応（ナビゲーション・視認性・アクセシビリティ）**:
   - **`package.json` / `package-lock.json` / `DESIGN.md`**: バージョン表記を `0.8.4` へ更新。タスク管理用に `TASKS.md` を追加
 - **Agent Window: 実行中の停止ボタンと入力欄有効化**:

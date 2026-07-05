@@ -111,6 +111,16 @@ test('applyAgentWindowMessage reloads active task history when an agent run fini
   assert.deepEqual(state.nextCommands, [{ command: 'loadChatHistory', taskId: 'active-task' }]);
 });
 
+test('applyAgentWindowMessage reloads saved history again after the agent stream ends', () => {
+  const state = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'active-task', loading: false, streamingText: '' }),
+    { command: 'agentRunEnded', taskId: 'active-task' } as any,
+  );
+
+  assert.equal(state.historyLoading, true);
+  assert.deepEqual(state.nextCommands, [{ command: 'loadChatHistory', taskId: 'active-task' }]);
+});
+
 test('applyAgentWindowMessage clears loading when another surface owns the agent run', () => {
   const state = applyAgentWindowMessage(
     initialState({ loading: true, streamingText: 'pending' }),

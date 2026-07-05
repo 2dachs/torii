@@ -41,6 +41,7 @@ export class AgentWindowPanel {
   private readonly disposables: vscode.Disposable[] = [];
   private agentReq: ReturnType<typeof http.request> | null = null;
   private currentAgentTaskId: string | null = null;
+  private currentAgentCompleted = false;
   private agentTextDeltaBuffer = '';
   private agentTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   private agentEventBatchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -427,6 +428,7 @@ export class AgentWindowPanel {
       ...(modelIntent ? { modelIntent } : {}),
     });
     this.currentAgentTaskId = taskId || null;
+    this.currentAgentCompleted = false;
 
     const req = http.request({
       hostname: 'localhost',
@@ -458,11 +460,19 @@ export class AgentWindowPanel {
       res.on('end', () => {
         this.flushAgentTextDelta();
         this.flushAgentEventBatch();
-        agentRunRegistry.finish(this.currentAgentTaskId, 'agentWindow');
+        const finishedTaskId = this.currentAgentTaskId;
+        const completed = this.currentAgentCompleted;
+        agentRunRegistry.finish(finishedTaskId, 'agentWindow');
         this.agentReq = null;
         this.currentAgentTaskId = null;
+        this.currentAgentCompleted = false;
         void updateBudgetDisplay(this.context);
-        void this.sendTasks();
+        void (async () => {
+          await this.sendTasks();
+          if (completed && finishedTaskId) {
+            await this.panel.webview.postMessage({ command: 'agentRunEnded', taskId: finishedTaskId });
+          }
+        })();
       });
     });
 
@@ -473,6 +483,7 @@ export class AgentWindowPanel {
       agentRunRegistry.finish(this.currentAgentTaskId, 'agentWindow');
       this.agentReq = null;
       this.currentAgentTaskId = null;
+      this.currentAgentCompleted = false;
       if (err.message !== 'socket hang up') {
         void this.panel.webview.postMessage({ command: 'agentEvent', event: { type: 'error', message: err.message } });
       }
@@ -485,6 +496,12 @@ export class AgentWindowPanel {
     if (event?.type === 'task_created' && typeof event.taskId === 'string') {
       agentRunRegistry.move(this.currentAgentTaskId, event.taskId, 'agentWindow');
       this.currentAgentTaskId = event.taskId;
+    }
+    if (event?.type === 'done') {
+      this.currentAgentCompleted = true;
+    }
+    if (event?.type === 'error') {
+      this.currentAgentCompleted = false;
     }
     if (event?.type === 'text_delta' && typeof event.text === 'string') {
       this.queueAgentTextDelta(event.text);
@@ -512,6 +529,7 @@ export class AgentWindowPanel {
     // Registry解放はここで捕捉したtaskIdに対して行う
     const taskId = this.currentAgentTaskId;
     this.currentAgentTaskId = null;
+    this.currentAgentCompleted = false;
     agentRunRegistry.finish(taskId, 'agentWindow');
     if (taskId) {
       const payload = JSON.stringify({ taskId });

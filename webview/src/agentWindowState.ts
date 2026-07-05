@@ -49,6 +49,18 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
     };
   }
 
+  if (message.command === 'agentRunEnded' && typeof (message as any).taskId === 'string') {
+    const taskId = (message as any).taskId;
+    if (taskId !== state.activeTaskId) {
+      return { ...state, nextCommands: [] };
+    }
+    return {
+      ...state,
+      historyLoading: true,
+      nextCommands: [{ command: 'loadChatHistory', taskId }],
+    };
+  }
+
   if (message.command === 'agentEvent' && (message as any).event) {
     const event = (message as any).event as AgentEvent;
     if (event.type === 'task_created') {
