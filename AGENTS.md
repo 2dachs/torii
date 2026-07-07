@@ -186,6 +186,11 @@ npm run vscode:prepublish  # 両方まとめてビルド
 ## 修正・変更ログ
 
 ### 2026-07-07
+- **0.8.6 VSIX配布用バージョン更新**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: 配布物用の版を `0.8.6` へ更新
+- **Agent Window の承認 UI を一画面化**:
+  - **`webview/src/agentWindowState.ts` / `webview/src/AgentWindow.tsx`**: 承認待ちを `agentEvents` から分離し、履歴再読込やイベント上限で消えないようにした。ファイル変更の承認カード内に inline diff を表示し、`VS Codeで開く` は手動ボタンだけにした
+  - **`src/backend/tools.ts` / `src/webview/agentWindowPanel.ts`**: `vscode.diff` の自動遷移を廃止し、必要時のみ temp diff を開く経路に変更。承認後に temp ファイルを片付ける
 - **AGENTS.mdへの運用ドキュメント統合**:
   - **`CLAUDE.md`**: 重複していたプロジェクト方針・機能一覧・変更ログを削除し、冒頭 `@AGENTS.md` で `AGENTS.md` を必ず読む薄い入口ファイルへ変更
   - **`AGENTS.md`**: Toriiの運用ルール・実装済み機能・既知の課題・変更ログの唯一の正として維持

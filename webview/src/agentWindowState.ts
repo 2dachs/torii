@@ -1,4 +1,4 @@
-import type { AgentEvent, ChatMessage, Task, VsCodeMessage } from './types';
+import type { AgentEvent, ChatMessage, PendingApproval, Task, VsCodeMessage } from './types';
 
 type AgentRunOwner = 'sidebar' | 'agentWindow';
 
@@ -11,6 +11,7 @@ export interface AgentWindowState {
   loading: boolean;
   streamingText: string;
   agentEvents: AgentEvent[];
+  pendingApprovals: PendingApproval[];
   blockedOwner?: AgentRunOwner | null;
   historyLoading?: boolean;
 }
@@ -36,6 +37,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       ...state,
       loading: false,
       streamingText: '',
+      pendingApprovals: [],
       blockedOwner: (message as any).owner,
       nextCommands: [],
     };
@@ -45,6 +47,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
     return {
       ...state,
       loading: false,
+      pendingApprovals: [],
       nextCommands: [],
     };
   }
@@ -68,6 +71,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
         ...state,
         activeTaskId: event.taskId,
         agentEvents: [...state.agentEvents, event].slice(-30),
+        pendingApprovals: [],
         nextCommands: [{ command: 'loadChatHistory', taskId: event.taskId }],
       };
     }
@@ -75,6 +79,19 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       return {
         ...state,
         streamingText: `${state.streamingText}${event.text}`,
+        nextCommands: [],
+      };
+    }
+    if (event.type === 'approval_required') {
+      const pendingApproval = {
+        id: event.id,
+        tool: event.tool,
+        data: event.data,
+      };
+      return {
+        ...state,
+        agentEvents: [...state.agentEvents, event].slice(-30),
+        pendingApprovals: [...state.pendingApprovals.filter((approval) => approval.id !== event.id), pendingApproval],
         nextCommands: [],
       };
     }
@@ -107,6 +124,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       messages: [],
       streamingText: '',
       agentEvents: [],
+      pendingApprovals: [],
       historyLoading: true,
       nextCommands: [],
     };
@@ -125,6 +143,7 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       tasksLoading: false,
       streamingText: activeTaskId === state.activeTaskId ? state.streamingText : '',
       agentEvents: activeTaskId === state.activeTaskId ? state.agentEvents : [],
+      pendingApprovals: activeTaskId === state.activeTaskId ? state.pendingApprovals : [],
       historyLoading: activeTaskId && activeTaskId !== state.activeTaskId ? true : state.historyLoading,
       nextCommands: activeTaskId && activeTaskId !== state.activeTaskId
         ? [{ command: 'loadChatHistory', taskId: activeTaskId }]

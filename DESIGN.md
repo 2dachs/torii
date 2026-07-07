@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.8.5）
+## 3. 現在の実装状態（v0.8.6）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
@@ -91,7 +91,7 @@
 - `@` メンション: 現在のファイル名を入力欄に挿入して参照可能
 - タスク管理UI: 検索・リネーム・削除をタスクリストから実行可能
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
-- **Agent Window Phase 1**: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを第1エディタグループに開き、サイドバーUIとは別のViteエントリ `agent-window.html` で3ペインの大画面エージェントUIを表示。タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・確認付きタスク削除・Agent送信・実行中の停止ボタン・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・軽量ファイルツリー・localhostプレビュー・@ファイルメンション・完了メッセージのMarkdown描画を既存backendへ接続済み。SSE完了後は保存済み履歴を再同期し、`done` と保存処理の順序競合で回答が消えたように見える状態を避ける。外部URLはSimple Browserへ逃がす。980px以下では左ペインをアイコン化し右ペインはヘッダートグルからオーバーレイ表示
+- **Agent Window Phase 1**: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを第1エディタグループに開き、サイドバーUIとは別のViteエントリ `agent-window.html` で3ペインの大画面エージェントUIを表示。タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・確認付きタスク削除・Agent送信・実行中の停止ボタン・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カードと inline diff・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・軽量ファイルツリー・localhostプレビュー・@ファイルメンション・完了メッセージのMarkdown描画を既存backendへ接続済み。SSE完了後は保存済み履歴を再同期し、`done` と保存処理の順序競合で回答が消えたように見える状態を避ける。外部URLはSimple Browserへ逃がす。980px以下では左ペインをアイコン化し右ペインはヘッダートグルからオーバーレイ表示
 - **UI品質（v0.8.4）**: サイドバーのmutedテキストをWCAG AA（4.5:1）準拠の色に変更し最小フォントを11pxへ統一。日本語フォントスタック（Hiragino Sans / Noto Sans JP / Yu Gothic UI / Meiryo）指定。`:focus-visible` フォーカスリングとアイコンボタンの `aria-label` を両UIに追加
 - **ストリーミング応答**: SSEによるリアルタイム表示
 - **初回オンボーディング**: 初回起動時にOllama開始 / 設定画面への導線を表示
@@ -145,7 +145,7 @@
 |------|--------|------|
 | 予算バーの計算が文字列パースに依存 | 解消済み | `webview/src/budget.js` に数値スナップショットを切り出し、`App.tsx` の予算表示を純関数化して解消 |
 | Expressセキュリティ（将来検討） | 低 | 現在は `127.0.0.1` バインドで外部アクセス不可。Extension Host直接実行への移行は中長期課題 |
-| Agent Window追加機能 | 中 | Agent Windowの基本操作、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンションは接続済み。OSSモデル推奨プリセット、ライセンスゲートは未実装 |
+| Agent Window追加機能 | 中 | Agent Windowの基本操作、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンション、承認カード内 inline diff は接続済み。OSSモデル推奨プリセット、ライセンスゲートは未実装 |
 
 ---
 
@@ -250,7 +250,7 @@ type AgentEvent =
   | { type: 'text_delta'; text: string }           // ストリーミングテキスト
   | { type: 'tool_use'; id: string; tool: string; input: object }  // ツール呼び出し開始
   | { type: 'tool_result'; id: string; ok: boolean; output: string } // ツール実行結果
-  | { type: 'approval_required'; id: string; tool: string; preview: string } // 承認要求
+  | { type: 'approval_required'; id: string; tool: string; data: object } // 承認要求
   | { type: 'thinking'; message: string }           // 状態表示（「ファイルを読み取り中...」）
   | { type: 'done'; iterations: number; tokensUsed: number; costUsd: number }
   | { type: 'error'; message: string }

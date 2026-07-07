@@ -7,6 +7,7 @@ import { shouldRequestTasksOnToggle } from './taskLoading';
 import { appendVisibleAgentSteps, summarizeToolInputForUi } from './agentProgress';
 import { extractMessageFilePaths } from './messageFilePaths';
 import { MarkdownContent } from './MarkdownContent';
+import { buildInlineDiffPreview, formatDiffLines } from './diffPreview';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
@@ -110,18 +111,6 @@ function formatTaskDate(iso: string): string {
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}日前`;
   return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-function splitDiffLines(content: string): string[] {
-  if (!content) return [];
-  return content.replace(/\r\n/g, '\n').split('\n');
-}
-
-function formatDiffLines(lines: string[], startLine: number, prefix: string): string {
-  if (lines.length === 0) return '（なし）';
-  return lines
-    .map((line, idx) => `${prefix}${String(startLine + idx).padStart(4, ' ')} | ${line}`)
-    .join('\n');
 }
 
 type OpenRouterCatalogModel = {
@@ -1538,38 +1527,7 @@ function App() {
 
   const pendingFileDiff = useMemo(() => {
     if (!pendingFileWrite) return null;
-    const originalLines = splitDiffLines(pendingFileWrite.originalContent);
-    const nextLines = splitDiffLines(pendingFileWrite.nextContent);
-    let prefix = 0;
-    while (
-      prefix < originalLines.length &&
-      prefix < nextLines.length &&
-      originalLines[prefix] === nextLines[prefix]
-    ) {
-      prefix += 1;
-    }
-
-    let suffix = 0;
-    while (
-      suffix < originalLines.length - prefix &&
-      suffix < nextLines.length - prefix &&
-      originalLines[originalLines.length - 1 - suffix] === nextLines[nextLines.length - 1 - suffix]
-    ) {
-      suffix += 1;
-    }
-
-    const originalChanged = originalLines.slice(prefix, originalLines.length - suffix);
-    const nextChanged = nextLines.slice(prefix, nextLines.length - suffix);
-
-    return {
-      originalLineCount: originalLines.length,
-      nextLineCount: nextLines.length,
-      prefix,
-      suffix,
-      originalChanged,
-      nextChanged,
-      isChanged: pendingFileWrite.originalContent !== pendingFileWrite.nextContent,
-    };
+    return buildInlineDiffPreview(pendingFileWrite.originalContent, pendingFileWrite.nextContent);
   }, [pendingFileWrite]);
 
   // ── セッション内モデル別統計（機能4）──

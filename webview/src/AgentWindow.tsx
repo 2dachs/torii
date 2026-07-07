@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { getPendingAgentWindowApprovals } from './agentWindowApprovals';
 import {
   addMentionedFile,
   getActiveFileMentionQuery,
@@ -26,6 +25,7 @@ import {
 import { stripAgentInternalReminder } from './agentWindowMessageText';
 import { MarkdownContent } from './MarkdownContent';
 import { getAgentWindowProgressText } from './agentWindowProgress';
+import { buildInlineDiffPreview, formatDiffLines } from './diffPreview';
 import type { AgentEvent, ChatMessage, PendingApproval, VsCodeMessage } from './types';
 
 declare const acquireVsCodeApi: undefined | (() => { postMessage(message: unknown): void });
@@ -74,6 +74,7 @@ export default function AgentWindow() {
     loading: false,
     streamingText: '',
     agentEvents: [],
+    pendingApprovals: [],
   });
 
   useEffect(() => {
@@ -191,7 +192,7 @@ export default function AgentWindow() {
     handleSendAgent();
   };
 
-  const pendingApprovals = getPendingAgentWindowApprovals(state.agentEvents, resolvedApprovalIds);
+  const pendingApprovals = state.pendingApprovals.filter((approval) => !resolvedApprovalIds.has(approval.id));
   const latestUserPrompt = [...state.messages].reverse().find((message) => message.role === 'user')?.content ?? input;
   const progressText = getAgentWindowProgressText({
     loading: state.loading,
@@ -218,6 +219,10 @@ export default function AgentWindow() {
       id: approval.id,
       approved,
     });
+  };
+
+  const handleOpenApprovalDiff = (approvalId: string) => {
+    vscode?.postMessage({ command: 'openApprovalDiff', id: approvalId });
   };
 
   const handleFileTreeEntry = (entry: FileTreeEntry) => {
@@ -420,12 +425,18 @@ export default function AgentWindow() {
           <section className="agent-window-approval-bar" aria-label="Pending approvals">
             {pendingApprovals.map((approval) => (
               <div key={approval.id} className="agent-window-approval-card">
-                <div>
-                  <p className="agent-window-message-meta">承認待ち · {approval.tool}</p>
-                  <strong>{approvalSummary(approval)}</strong>
+                <div className="agent-window-approval-card-body">
+                  <div>
+                    <p className="agent-window-message-meta">承認待ち · {approval.tool}</p>
+                    <strong>{approvalSummary(approval)}</strong>
+                  </div>
+                  {approval.tool !== 'run_command' && renderApprovalDiff(approval)}
                 </div>
                 <div className="agent-window-approval-actions">
                   <button type="button" onClick={() => handleApproval(approval, false)}>拒否</button>
+                  {approval.tool !== 'run_command' && (
+                    <button type="button" onClick={() => handleOpenApprovalDiff(approval.id)}>エディタで開く</button>
+                  )}
                   <button type="button" className="is-primary" onClick={() => handleApproval(approval, true)}>承認</button>
                 </div>
               </div>
@@ -548,6 +559,47 @@ function approvalSummary(approval: PendingApproval): string {
   const command = typeof approval.data.command === 'string' ? approval.data.command : '';
   const filePath = typeof approval.data.path === 'string' ? approval.data.path : '';
   return command || filePath || approval.tool;
+}
+
+function renderApprovalDiff(approval: PendingApproval): JSX.Element | null {
+  const approvalData = approval.data as Record<string, unknown>;
+  const oldContent = typeof approvalData.oldContent === 'string' ? approvalData.oldContent : null;
+  const newContent = typeof approvalData.newContent === 'string' ? approvalData.newContent : null;
+  const skippedReason = typeof approvalData.diffPreviewSkippedReason === 'string' ? approvalData.diffPreviewSkippedReason : null;
+
+  if (!oldContent || !newContent) {
+    if (!skippedReason) return null;
+    return (
+      <div className="agent-window-approval-diff agent-window-approval-diff-fallback">
+        <div className="agent-window-approval-diff-summary">{skippedReason}</div>
+      </div>
+    );
+  }
+
+  const preview = buildInlineDiffPreview(oldContent, newContent);
+  return (
+    <div className="agent-window-approval-diff">
+      <div className="agent-window-approval-diff-summary">
+        {preview.isChanged
+          ? `先頭 ${preview.prefix} 行・末尾 ${preview.suffix} 行は変更なし / ${preview.originalLineCount} → ${preview.nextLineCount} 行`
+          : '差分はありません'}
+      </div>
+      <div className="agent-window-approval-diff-grid">
+        <section className="agent-window-approval-diff-column">
+          <div className="agent-window-approval-diff-column-title">変更前</div>
+          <pre className="agent-window-approval-diff-pre removed">
+            {formatDiffLines(preview.originalChanged, preview.prefix + 1, '- ')}
+          </pre>
+        </section>
+        <section className="agent-window-approval-diff-column">
+          <div className="agent-window-approval-diff-column-title">変更後</div>
+          <pre className="agent-window-approval-diff-pre added">
+            {formatDiffLines(preview.nextChanged, preview.prefix + 1, '+ ')}
+          </pre>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function toFileTreeEntries(value: unknown): FileTreeEntry[] {

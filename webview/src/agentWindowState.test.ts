@@ -32,6 +32,7 @@ const initialState = (overrides = {}) => ({
   loading: false,
   streamingText: '',
   agentEvents: [],
+  pendingApprovals: [],
   ...overrides,
 });
 
@@ -56,6 +57,7 @@ test('applyAgentWindowMessage keeps the current task and stores chat history', (
 
   assert.equal(state.activeTaskId, 'b');
   assert.deepEqual(state.messages, [loadedMessage]);
+  assert.deepEqual(state.pendingApprovals, []);
   assert.deepEqual(state.nextCommands, []);
 });
 
@@ -67,6 +69,7 @@ test('applyAgentWindowMessage selects a newly created task before the refreshed 
 
   assert.equal(state.activeTaskId, 'new-task');
   assert.deepEqual(state.messages, []);
+  assert.deepEqual(state.pendingApprovals, []);
   assert.deepEqual(state.nextCommands, []);
 });
 
@@ -97,7 +100,35 @@ test('applyAgentWindowMessage syncs auto-created agent task ids', () => {
   );
 
   assert.equal(state.activeTaskId, 'agent-task');
+  assert.deepEqual(state.pendingApprovals, []);
   assert.deepEqual(state.nextCommands, [{ command: 'loadChatHistory', taskId: 'agent-task' }]);
+});
+
+test('applyAgentWindowMessage stores approval requests outside the event log', () => {
+  const state = applyAgentWindowMessage(
+    initialState({ loading: true }),
+    { command: 'agentEvent', event: { type: 'approval_required', id: 'approve-1', tool: 'write_file', data: { path: 'src/a.ts', oldContent: 'a\n', newContent: 'b\n' } } } as any,
+  );
+
+  assert.deepEqual(state.pendingApprovals, [
+    { id: 'approve-1', tool: 'write_file', data: { path: 'src/a.ts', oldContent: 'a\n', newContent: 'b\n' } },
+  ]);
+  assert.equal(state.agentEvents[state.agentEvents.length - 1]?.type, 'approval_required');
+});
+
+test('applyAgentWindowMessage keeps unresolved approvals across history reloads', () => {
+  const withApproval = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'active-task', loading: true, streamingText: 'answer' }),
+    { command: 'agentEvent', event: { type: 'approval_required', id: 'approve-1', tool: 'replace_in_file', data: { path: 'src/a.ts', oldContent: 'a\n', newContent: 'b\n' } } } as any,
+  );
+
+  const loadedHistory = applyAgentWindowMessage(
+    withApproval,
+    { command: 'loadChatHistory', data: [message('m1', 'active-task')] },
+  );
+
+  assert.deepEqual(loadedHistory.pendingApprovals, withApproval.pendingApprovals);
+  assert.deepEqual(loadedHistory.messages, [message('m1', 'active-task')]);
 });
 
 test('applyAgentWindowMessage reloads active task history when an agent run finishes', () => {
@@ -129,17 +160,19 @@ test('applyAgentWindowMessage clears loading when another surface owns the agent
 
   assert.equal(state.loading, false);
   assert.equal(state.streamingText, '');
+  assert.deepEqual(state.pendingApprovals, []);
   assert.equal(state.blockedOwner, 'sidebar');
 });
 
 test('applyAgentWindowMessage stops loading and keeps partial output on requestCancelled', () => {
   const state = applyAgentWindowMessage(
-    initialState({ activeTaskId: 'task-1', loading: true, streamingText: '途中までの回答' }),
+    initialState({ activeTaskId: 'task-1', loading: true, streamingText: '途中までの回答', pendingApprovals: [{ id: 'approve-1', tool: 'run_command', data: { command: 'npm test' } }] }),
     { command: 'requestCancelled' } as any,
   );
 
   assert.equal(state.loading, false);
   assert.equal(state.streamingText, '途中までの回答');
+  assert.deepEqual(state.pendingApprovals, []);
   assert.deepEqual(state.nextCommands, []);
 });
 

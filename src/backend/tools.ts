@@ -266,27 +266,14 @@ export async function buildClineTools(
     newContent: string,
     label: string,
   ): Promise<boolean> => {
-    let tmpOld: string | null = null;
-    let tmpNew: string | null = null;
+    const tmpOld = path.join(os.tmpdir(), `torii-old-${id}`);
+    const tmpNew = path.join(os.tmpdir(), `torii-new-${id}`);
     const diffTitle = `Torii diff: ${label}`;
     const previewDecision = getDiffPreviewDecision(oldContent, newContent);
-
-    if (previewDecision.openDiff) {
-      tmpOld = path.join(os.tmpdir(), `torii-old-${id}`);
-      tmpNew = path.join(os.tmpdir(), `torii-new-${id}`);
-      try {
-        fs.writeFileSync(tmpOld, oldContent, 'utf-8');
-        fs.writeFileSync(tmpNew, newContent, 'utf-8');
-        await vscode.commands.executeCommand('vscode.diff',
-          vscode.Uri.file(tmpOld),
-          vscode.Uri.file(tmpNew),
-          diffTitle,
-          { preview: true },
-        );
-      } catch { /* diff表示失敗でも承認フローは続行 */ }
-    } else if (previewDecision.reason) {
-      getOutputChannel().appendLine(`[diff-preview-skipped] ${label}: ${previewDecision.reason}`);
-    }
+    try {
+      fs.writeFileSync(tmpOld, oldContent, 'utf-8');
+      fs.writeFileSync(tmpNew, newContent, 'utf-8');
+    } catch { /* temp diff の作成に失敗しても承認フローは続行 */ }
 
     const { oldContent: _oldContent, newContent: _newContent, ...approvalData } = data as Record<string, unknown>;
     onEvent({
@@ -299,6 +286,10 @@ export async function buildClineTools(
         newSize: newContent.length,
         diffPreviewSkipped: !previewDecision.openDiff,
         diffPreviewSkippedReason: previewDecision.reason,
+        diffTitle,
+        approvalDiffOldPath: tmpOld,
+        approvalDiffNewPath: tmpNew,
+        ...(previewDecision.openDiff ? { oldContent, newContent } : {}),
       },
     });
     const approved = await requestApproval(id);
@@ -314,12 +305,8 @@ export async function buildClineTools(
       }
     } catch { /* 閉じられない場合は無視 */ }
 
-    if (tmpOld) {
-      try { fs.unlinkSync(tmpOld); } catch { /* ignore */ }
-    }
-    if (tmpNew) {
-      try { fs.unlinkSync(tmpNew); } catch { /* ignore */ }
-    }
+    try { fs.unlinkSync(tmpOld); } catch { /* ignore */ }
+    try { fs.unlinkSync(tmpNew); } catch { /* ignore */ }
 
     return approved;
   };

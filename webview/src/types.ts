@@ -227,7 +227,23 @@ export type AgentEvent =
   | { type: 'tool_use'; id: string; tool: string; input: Record<string, unknown> }
   | { type: 'tool_result'; id: string; tool: string; ok: boolean; output: string; outputTruncated?: boolean; outputOriginalLength?: number }
   | { type: 'approval_required'; id: string; tool: 'run_command'; data: { command: string } }
-  | { type: 'approval_required'; id: string; tool: 'write_file'; data: { path: string; oldSize?: number; newSize?: number; diffPreviewSkipped?: boolean; diffPreviewSkippedReason?: string } }
+  | {
+      type: 'approval_required';
+      id: string;
+      tool: 'write_file' | 'replace_in_file';
+      data: {
+        path: string;
+        oldSize?: number;
+        newSize?: number;
+        diffPreviewSkipped?: boolean;
+        diffPreviewSkippedReason?: string;
+        oldContent?: string;
+        newContent?: string;
+        diffTitle?: string;
+        approvalDiffOldPath?: string;
+        approvalDiffNewPath?: string;
+      };
+    }
   | { type: 'approval_required'; id: string; tool: string; data: Record<string, unknown> }
   | { type: 'file_change_applied'; undoId: string; path: string; action: 'create' | 'update' }
   | { type: 'file_change_undone'; undoId: string; path: string; ok: boolean; message: string }

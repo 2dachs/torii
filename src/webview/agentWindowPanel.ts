@@ -39,6 +39,7 @@ export class AgentWindowPanel {
   private readonly context: vscode.ExtensionContext;
   private readonly runtime: ToriiRuntime;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly approvalDiffPreviews = new Map<string, { oldPath: string; newPath: string; label: string }>();
   private agentReq: ReturnType<typeof http.request> | null = null;
   private currentAgentTaskId: string | null = null;
   private currentAgentCompleted = false;
@@ -126,6 +127,11 @@ export class AgentWindowPanel {
 
     if (message?.command === MSG_AGENT_APPROVE) {
       await this.handleAgentApprove(message.id, message.approved);
+      return;
+    }
+
+    if (message?.command === 'openApprovalDiff') {
+      await this.openApprovalDiff(message.id);
       return;
     }
 
@@ -497,6 +503,15 @@ export class AgentWindowPanel {
       agentRunRegistry.move(this.currentAgentTaskId, event.taskId, 'agentWindow');
       this.currentAgentTaskId = event.taskId;
     }
+    if (event?.type === 'approval_required' && typeof event.id === 'string') {
+      const approvalData = event.data && typeof event.data === 'object' ? event.data as Record<string, unknown> : {};
+      const oldPath = typeof approvalData.approvalDiffOldPath === 'string' ? approvalData.approvalDiffOldPath : '';
+      const newPath = typeof approvalData.approvalDiffNewPath === 'string' ? approvalData.approvalDiffNewPath : '';
+      const label = typeof approvalData.diffTitle === 'string' ? approvalData.diffTitle : `Torii diff: ${event.tool}`;
+      if (oldPath && newPath) {
+        this.approvalDiffPreviews.set(event.id, { oldPath, newPath, label });
+      }
+    }
     if (event?.type === 'done') {
       this.currentAgentCompleted = true;
     }
@@ -530,6 +545,7 @@ export class AgentWindowPanel {
     const taskId = this.currentAgentTaskId;
     this.currentAgentTaskId = null;
     this.currentAgentCompleted = false;
+    this.approvalDiffPreviews.clear();
     agentRunRegistry.finish(taskId, 'agentWindow');
     if (taskId) {
       const payload = JSON.stringify({ taskId });
@@ -573,6 +589,25 @@ export class AgentWindowPanel {
       req.write(payload);
       req.end();
     });
+    this.approvalDiffPreviews.delete(id);
+  }
+
+  private async openApprovalDiff(id?: string): Promise<void> {
+    if (!id) return;
+    const preview = this.approvalDiffPreviews.get(id);
+    if (!preview) return;
+    try {
+      const oldDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(preview.oldPath));
+      const newDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(preview.newPath));
+      await vscode.commands.executeCommand('vscode.diff',
+        oldDoc.uri,
+        newDoc.uri,
+        preview.label,
+        { preview: true },
+      );
+    } catch {
+      // 失敗しても承認フローは継続する
+    }
   }
 
   private queueAgentTextDelta(text: string): void {
@@ -612,6 +647,7 @@ export class AgentWindowPanel {
     agentRunRegistry.finish(this.currentAgentTaskId, 'agentWindow');
     this.agentReq = null;
     this.currentAgentTaskId = null;
+    this.approvalDiffPreviews.clear();
     this.flushAgentTextDelta();
     this.flushAgentEventBatch();
     while (this.disposables.length) {
