@@ -399,25 +399,22 @@ export default function AgentWindow() {
               <p className="agent-window-message-meta">Torii</p>
               <p>タスクを選ぶか、下の入力欄からエージェントへの依頼を送信してください。</p>
             </article>
-          ) : (
-            <>
-              {state.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
-              {state.streamingText && (
-                <article className="agent-window-message agent-window-message-assistant">
-                  <p className="agent-window-message-meta">Torii</p>
-                  <p>{state.streamingText}</p>
-                </article>
-              )}
-              {state.agentEvents.length > 0 && (
-                <div className="agent-window-event-list">
-                  {state.agentEvents.map((event, index) => (
-                    <div key={`${event.type}-${index}`} className="agent-window-event">
-                      {describeAgentEvent(event)}
-                    </div>
-                  ))}
+          ) : null}
+          {state.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
+          {state.streamingText && (
+            <article className="agent-window-message agent-window-message-assistant">
+              <p className="agent-window-message-meta">Torii</p>
+              <p>{state.streamingText}</p>
+            </article>
+          )}
+          {state.agentEvents.length > 0 && (
+            <div className="agent-window-event-list">
+              {state.agentEvents.map((event, index) => (
+                <div key={`${event.type}-${index}`} className="agent-window-event">
+                  {describeAgentEvent(event)}
                 </div>
-              )}
-            </>
+              ))}
+            </div>
           )}
         </section>
 
