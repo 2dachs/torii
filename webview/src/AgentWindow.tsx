@@ -200,7 +200,14 @@ export default function AgentWindow() {
     events: state.agentEvents,
   });
 
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+
   const handleCancelAgent = () => {
+    if (!cancelConfirm) {
+      setCancelConfirm(true);
+      return;
+    }
+    setCancelConfirm(false);
     vscode?.postMessage({ command: 'cancelAgent' });
   };
 

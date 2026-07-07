@@ -1,4 +1,4 @@
-# Pettal Practitioner — 現状と今後の実装計画（壁打ち用ブリーフィング）
+# Torii — 現状と今後の実装計画（壁打ち用ブリーフィング）
 
 ## プロジェクト概要
 
@@ -6,7 +6,7 @@ VSCode拡張機能として動作するAIコーディングアシスタント。
 マルチプロバイダー対応（Anthropic / DeepSeek / OpenAI / Gemini / Ollama）。
 エージェントモードでファイル操作・コマンド実行・ユーザー承認フローを持つ。
 
-**リポジトリ**: `/Users/daisuke/Desktop/pettal-practitioner`  
+**リポジトリ**: `/Users/daisuke/Desktop/torii`  
 **Vercel（webview公開）**: pettal-git-main-daisuke-webapps-projects.vercel.app
 
 ---
@@ -111,7 +111,7 @@ LLMが「タスク完了」を自己宣言する手段がない。
 
 ## Clineとの能力比較（現状）
 
-| 能力 | Pettal現状 | Cline |
+| 能力 | Torii現状 | Cline |
 |------|-----------|-------|
 | 自律的な調査 | 弱い | 強い（attempt_completion で自己完結） |
 | ツール数 | 6個 | 15+個 |

@@ -13,7 +13,7 @@ import { appendTaskReminderForToolResult, TASK_REMINDER } from './toolResultRemi
 
 let _outputChannel: vscode.OutputChannel | null = null;
 function getOutputChannel(): vscode.OutputChannel {
-  if (!_outputChannel) _outputChannel = vscode.window.createOutputChannel('Pettal Agent');
+  if (!_outputChannel) _outputChannel = vscode.window.createOutputChannel('Torii Agent');
   return _outputChannel;
 }
 

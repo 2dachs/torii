@@ -379,7 +379,7 @@ if (license !== 'valid' && license !== 'grace' && license !== 'trial') {
 
 ### v0.5.0以降（成長フェーズ）
 - [ ] チームプラン（ライセンス管理）
-- [ ] プロジェクトへの `PETTAL.md` 対応（プロジェクト固有の指示を読む）
+- [ ] プロジェクトへの `TORII.md` 対応（プロジェクト固有の指示を読む）
 - [ ] 日本語コメント自動付与オプション
 - [ ] 管理ダッシュボード（チーム向けAPI利用量）
 
@@ -391,7 +391,7 @@ if (license !== 'valid' && license !== 'grace' && license !== 'trial') {
 2. **チャットモードとエージェントモードの切替UI**: トグルボタン？ スラッシュコマンド（`/agent`）？
 3. **ストリーミング中の予算更新タイミング**: 完了後のみでよいか？
 4. **Ollamaがtool callingに対応しない場合の体験**: 無言でフォールバックか、メッセージ表示か？
-5. **OSSとして公開するリポジトリ名**: `pettal-practitioner`のままでいいか？ ブランド整合性は？
+5. **OSSとして公開するリポジトリ名**: `torii` へ統一する
 6. **Proのマーケティング**: VS Code Marketplaceのbadgeに「⭐ Pro機能あり」を明示する方法
 7. **価格**: ¥1,000/月が妥当か？ ¥800（GitHub Copilotより安い）にすべきか？
 
@@ -400,7 +400,7 @@ if (license !== 'valid' && license !== 'grace' && license !== 'trial') {
 ## 付録: 現在のファイル構成
 
 ```
-pettal-practitioner/
+torii/
 ├── src/
 │   ├── extension.ts          # エントリポイント（activate/deactivate）
 │   ├── constants.ts          # プロバイダー定義・設定キー・LicenseStatus型

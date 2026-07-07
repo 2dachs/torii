@@ -185,6 +185,20 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ## 修正・変更ログ
 
+### 2026-07-07
+- **AGENTS.mdへの運用ドキュメント統合**:
+  - **`CLAUDE.md`**: 重複していたプロジェクト方針・機能一覧・変更ログを削除し、冒頭 `@AGENTS.md` で `AGENTS.md` を必ず読む薄い入口ファイルへ変更
+  - **`AGENTS.md`**: Toriiの運用ルール・実装済み機能・既知の課題・変更ログの唯一の正として維持
+  - **`src/brandingSurface.test.ts`**: `CLAUDE.md` が `AGENTS.md` へ委譲し、重複ハンドブック化しないことを検出する静的テストを追加
+- **旧ローカルフォルダ名の整理準備**:
+  - **`BRIEFING.md` / `DESIGN.md`**: ローカルリポジトリ表記とファイル構成例を `/Users/daisuke/Desktop/torii` / `torii/` へ更新
+  - **`webview/package.json` / `webview/package-lock.json`**: 内部webview package名を `torii-webview` へ変更
+  - **`src/brandingSurface.test.ts`**: 旧フォルダ名が公開・準公開ドキュメントへ戻った場合に検出するよう許可リストを縮小
+- **Marketplace公開前ブランド表記整理**:
+  - **`src/backend/tools.ts`**: ユーザーに見える旧出力チャンネル名を `Torii Agent` へ変更
+  - **`AGENTS.md` / `CLAUDE.md` / `DESIGN.md` / `BRIEFING.md`**: 公開前ドキュメント上の旧プロダクト名・旧指示ファイル名をTorii表記へ同期。互換性のため `.pettal`、旧設定キー、Marketplace ID `pettal.torii`、publisher `pettal` は維持
+  - **`src/brandingSurface.test.ts` / `package.json`**: ユーザー露出面に残る旧ブランド表記を検出する静的テストを追加
+
 ### 2026-07-05
 - **0.8.5 VSIX配布用バージョン更新**:
   - **`package.json` / `package-lock.json` / `DESIGN.md`**: 配布物用の版を `0.8.5` へ更新
@@ -664,7 +678,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 
 ## ブランド・プロダクト方針
 
-- プロダクト名：Torii（旧称: Pettal Practitioner）
+- プロダクト名：Torii
 - Marketplace ID：pettal.torii
 - 将来的にPettalの事業のひとつとして統合予定
 - ターゲット：Codex Pro + Cursorを使っている日本人個人開発者

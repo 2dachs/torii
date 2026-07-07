@@ -182,7 +182,10 @@
 }
 
 .agent-window-right-pane-toggle {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
 }
 
 .agent-window-secondary-button {
