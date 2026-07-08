@@ -2,6 +2,7 @@ import type { AgentEvent } from './types';
 
 interface AgentWindowProgressInput {
   loading: boolean;
+  pendingApprovalCount: number;
   prompt: string;
   streamingText: string;
   events: AgentEvent[];
@@ -27,6 +28,7 @@ function lastProgressEvent(events: AgentEvent[]): AgentEvent | null {
 
 export function getAgentWindowProgressText(input: AgentWindowProgressInput): string | null {
   if (!input.loading) return null;
+  if (input.pendingApprovalCount > 0) return '承認が必要な操作があります';
   if (input.streamingText.trim()) return '回答を組み立て中...';
 
   const event = lastProgressEvent(input.events);

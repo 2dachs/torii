@@ -248,7 +248,7 @@ export type AgentEvent =
   | { type: 'file_change_applied'; undoId: string; path: string; action: 'create' | 'update' }
   | { type: 'file_change_undone'; undoId: string; path: string; ok: boolean; message: string }
   | { type: 'privacy_notice'; message: string }
-  | { type: 'context_warning'; message: string }
+  | { type: 'context_warning'; message: string; currentTokens?: number; tokenLimit?: number; percent?: number }
   | { type: 'model_info'; providerId: string; modelName: string; isLocal: boolean }
   | { type: 'done'; iterations: number; tokensUsed: number; costUsd: number; costJpy: number }
   | { type: 'error'; message: string };

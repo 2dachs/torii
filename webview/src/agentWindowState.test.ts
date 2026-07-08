@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyAgentWindowMessage } from './agentWindowState';
+import { initialFileChangesState } from './agentWindowChanges';
 import type { ChatMessage, Task } from './types';
 
 const task = (id: string): Task => ({
@@ -32,6 +33,8 @@ const initialState = (overrides = {}) => ({
   loading: false,
   streamingText: '',
   agentEvents: [],
+  steps: [],
+  changes: initialFileChangesState,
   pendingApprovals: [],
   ...overrides,
 });
@@ -174,6 +177,47 @@ test('applyAgentWindowMessage stops loading and keeps partial output on requestC
   assert.equal(state.streamingText, '途中までの回答');
   assert.deepEqual(state.pendingApprovals, []);
   assert.deepEqual(state.nextCommands, []);
+});
+
+test('applyAgentWindowMessage keeps step checklist entries across a post-run history resync', () => {
+  const withStep = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'active-task' }),
+    { command: 'agentEvent', event: { type: 'tool_use', id: 't1', tool: 'read_file', input: { path: 'src/a.ts' } } } as any,
+  );
+  assert.equal(withStep.steps.length, 1);
+
+  const resynced = applyAgentWindowMessage(
+    withStep,
+    { command: 'loadChatHistory', data: [message('m1', 'active-task')] },
+  );
+  assert.deepEqual(resynced.steps, withStep.steps);
+});
+
+test('applyAgentWindowMessage keeps Changes entries across a post-run history resync', () => {
+  const withChange = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'active-task' }),
+    { command: 'agentEvent', event: { type: 'file_change_applied', undoId: 'u1', path: 'src/a.ts', action: 'update' } } as any,
+  );
+  assert.equal(withChange.changes.entries.length, 1);
+
+  const resynced = applyAgentWindowMessage(
+    withChange,
+    { command: 'loadChatHistory', data: [message('m1', 'active-task')] },
+  );
+  assert.deepEqual(resynced.changes, withChange.changes);
+});
+
+test('applyAgentWindowMessage clears the step checklist when a new task is created', () => {
+  const withStep = applyAgentWindowMessage(
+    initialState({ activeTaskId: 'active-task' }),
+    { command: 'agentEvent', event: { type: 'tool_use', id: 't1', tool: 'read_file', input: { path: 'src/a.ts' } } } as any,
+  );
+
+  const created = applyAgentWindowMessage(
+    withStep,
+    { command: 'agentWindowTaskCreated', taskId: 'new-task' } as any,
+  );
+  assert.deepEqual(created.steps, []);
 });
 
 test('applyAgentWindowMessage marks history as loading when switching tasks and clears it on arrival', () => {

@@ -1,4 +1,6 @@
 import type { AgentEvent, ChatMessage, PendingApproval, Task, VsCodeMessage } from './types';
+import { reduceAgentSteps, type AgentStep } from './agentWindowSteps';
+import { reduceFileChanges, initialFileChangesState, type FileChangesState } from './agentWindowChanges';
 
 type AgentRunOwner = 'sidebar' | 'agentWindow';
 
@@ -11,6 +13,8 @@ export interface AgentWindowState {
   loading: boolean;
   streamingText: string;
   agentEvents: AgentEvent[];
+  steps: AgentStep[];
+  changes: FileChangesState;
   pendingApprovals: PendingApproval[];
   blockedOwner?: AgentRunOwner | null;
   historyLoading?: boolean;
@@ -66,11 +70,15 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
 
   if (message.command === 'agentEvent' && (message as any).event) {
     const event = (message as any).event as AgentEvent;
+    const steps = reduceAgentSteps(state.steps, event);
+    const changes = reduceFileChanges(state.changes, event);
     if (event.type === 'task_created') {
       return {
         ...state,
         activeTaskId: event.taskId,
         agentEvents: [...state.agentEvents, event].slice(-30),
+        steps,
+        changes,
         pendingApprovals: [],
         nextCommands: [{ command: 'loadChatHistory', taskId: event.taskId }],
       };
@@ -91,6 +99,8 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       return {
         ...state,
         agentEvents: [...state.agentEvents, event].slice(-30),
+        steps,
+        changes,
         pendingApprovals: [...state.pendingApprovals.filter((approval) => approval.id !== event.id), pendingApproval],
         nextCommands: [],
       };
@@ -102,6 +112,8 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       loading: finished ? false : state.loading,
       streamingText: finished && !keepStreamingUntilHistoryReload ? '' : state.streamingText,
       agentEvents: [...state.agentEvents, event].slice(-30),
+      steps,
+      changes,
       nextCommands: event.type === 'done' && state.activeTaskId
         ? [{ command: 'loadChatHistory', taskId: state.activeTaskId }]
         : [],
@@ -113,6 +125,8 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
     return {
       ...state,
       agentEvents: [...state.agentEvents, ...events].slice(-30),
+      steps: events.reduce((acc, evt) => reduceAgentSteps(acc, evt), state.steps),
+      changes: events.reduce((acc, evt) => reduceFileChanges(acc, evt), state.changes),
       nextCommands: [],
     };
   }
@@ -124,6 +138,8 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       messages: [],
       streamingText: '',
       agentEvents: [],
+      steps: [],
+      changes: initialFileChangesState,
       pendingApprovals: [],
       historyLoading: true,
       nextCommands: [],
@@ -143,6 +159,8 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
       tasksLoading: false,
       streamingText: activeTaskId === state.activeTaskId ? state.streamingText : '',
       agentEvents: activeTaskId === state.activeTaskId ? state.agentEvents : [],
+      steps: activeTaskId === state.activeTaskId ? state.steps : [],
+      changes: activeTaskId === state.activeTaskId ? state.changes : initialFileChangesState,
       pendingApprovals: activeTaskId === state.activeTaskId ? state.pendingApprovals : [],
       historyLoading: activeTaskId && activeTaskId !== state.activeTaskId ? true : state.historyLoading,
       nextCommands: activeTaskId && activeTaskId !== state.activeTaskId
@@ -152,6 +170,8 @@ export function applyAgentWindowMessage(state: AgentWindowState, message: VsCode
   }
 
   if (message.command === 'loadChatHistory' && isMessageArray(message.data)) {
+    // steps/changes はタスク切替時（agentWindowTaskCreated/loadTasks）にのみリセットする。
+    // run完了後の履歴再同期でもここではクリアしないことで、チェックリストとChangesが消えないようにする。
     return {
       ...state,
       messages: message.data,

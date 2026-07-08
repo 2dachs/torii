@@ -130,6 +130,11 @@ export class AgentWindowPanel {
       return;
     }
 
+    if (message?.command === 'undoFileChange') {
+      await this.handleUndoFileChange(message.undoId);
+      return;
+    }
+
     if (message?.command === 'openApprovalDiff') {
       await this.openApprovalDiff(message.id);
       return;
@@ -179,6 +184,31 @@ export class AgentWindowPanel {
       command: 'workspaceInfo',
       name: workspace.name,
       path: workspace.path,
+    });
+    await this.sendBudgetSummary();
+  }
+
+  private async sendBudgetSummary(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const req = http.request({
+        hostname: 'localhost',
+        port: this.runtime.port,
+        path: '/api/budget',
+        method: 'GET',
+        headers: { 'x-torii-token': this.runtime.token },
+      }, (res: any) => {
+        let body = '';
+        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            void this.panel.webview.postMessage({ command: 'budgetUpdate', ...data });
+          } catch { /* 予算取得に失敗しても画面は継続表示する */ }
+          resolve();
+        });
+      });
+      req.on('error', () => resolve());
+      req.end();
     });
   }
 
@@ -475,6 +505,7 @@ export class AgentWindowPanel {
         void updateBudgetDisplay(this.context);
         void (async () => {
           await this.sendTasks();
+          await this.sendBudgetSummary();
           if (completed && finishedTaskId) {
             await this.panel.webview.postMessage({ command: 'agentRunEnded', taskId: finishedTaskId });
           }
@@ -590,6 +621,57 @@ export class AgentWindowPanel {
       req.end();
     });
     this.approvalDiffPreviews.delete(id);
+  }
+
+  private async handleUndoFileChange(undoId?: string): Promise<void> {
+    if (!undoId) return;
+    const payload = JSON.stringify({ undoId });
+    await new Promise<void>((resolve) => {
+      const req = http.request({
+        hostname: 'localhost',
+        port: this.runtime.port,
+        path: '/api/file-change/undo',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'x-torii-token': this.runtime.token,
+        },
+      }, (res: any) => {
+        let body = '';
+        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(body);
+            void this.panel.webview.postMessage({
+              command: 'agentEvent',
+              event: {
+                type: 'file_change_undone',
+                undoId,
+                path: result.path || '',
+                ok: !!result.ok,
+                message: result.message || result.error || '元に戻せませんでした',
+              },
+            });
+          } catch {
+            void this.panel.webview.postMessage({
+              command: 'agentEvent',
+              event: {
+                type: 'file_change_undone',
+                undoId,
+                path: '',
+                ok: false,
+                message: '元に戻す結果の解析に失敗しました',
+              },
+            });
+          }
+          resolve();
+        });
+      });
+      req.on('error', resolve);
+      req.write(payload);
+      req.end();
+    });
   }
 
   private async openApprovalDiff(id?: string): Promise<void> {

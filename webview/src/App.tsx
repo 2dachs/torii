@@ -8,41 +8,11 @@ import { appendVisibleAgentSteps, summarizeToolInputForUi } from './agentProgres
 import { extractMessageFilePaths } from './messageFilePaths';
 import { MarkdownContent } from './MarkdownContent';
 import { buildInlineDiffPreview, formatDiffLines } from './diffPreview';
+import { TOOL_JAPANESE_NAMES, TOOL_ICONS, TOOL_CATEGORIES } from './toolLabels';
+import { STUCK_LOADING_TIMEOUT_MS } from './stuckLoadingTimeout';
 
 const vscode = acquireVsCodeApi?.();
 const ONBOARDING_DISMISSED_KEY = 'torii_onboarding_dismissed_v1';
-const TOOL_JAPANESE_NAMES: Record<string, string> = {
-  read_file: 'ファイル読み込み中',
-  write_file: 'ファイル編集中',
-  replace_in_file: 'ファイル差分更新中',
-  run_command: 'コマンド実行中',
-  list_dir: 'ディレクトリ確認中',
-  list_directory: 'ディレクトリ確認中',
-  search_files: 'ファイル検索中',
-  grep: 'コード検索中',
-};
-
-const TOOL_ICONS: Record<string, string> = {
-  read_file: '📖',
-  write_file: '✏️',
-  replace_in_file: '📝',
-  run_command: '⚡',
-  list_dir: '📁',
-  list_directory: '📁',
-  search_files: '🔍',
-  grep: '🔍',
-};
-
-const TOOL_CATEGORIES: Record<string, string> = {
-  read_file: 'read',
-  write_file: 'write',
-  replace_in_file: 'write',
-  run_command: 'command',
-  list_dir: 'list',
-  list_directory: 'list',
-  search_files: 'search',
-  grep: 'search',
-};
 
 const CONTEXT_TOKEN_LIMITS: Record<string, number> = {
   'claude-opus': 180000,
@@ -1028,7 +998,7 @@ function App() {
       setIsStreaming(false);
       setStreamingText('');
       setAgentPhase(null);
-    }, 5 * 60 * 1000);
+    }, STUCK_LOADING_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [loading]);
 

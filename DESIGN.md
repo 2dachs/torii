@@ -72,7 +72,7 @@
 
 ---
 
-## 3. 現在の実装状態（v0.8.8）
+## 3. 現在の実装状態（v0.9.1）
 
 ### 実装済み機能
 - マルチプロバイダー: OpenAI / DeepSeek / Anthropic / Ollama / Google Gemini / OpenRouter
@@ -92,6 +92,7 @@
 - タスク管理UI: 検索・リネーム・削除をタスクリストから実行可能
 - **エージェントループ**: `@cline/agents` ベース。`read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - **Agent Window Phase 1**: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを第1エディタグループに開き、サイドバーUIとは別のViteエントリ `agent-window.html` で3ペインの大画面エージェントUIを表示。タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・確認付きタスク削除・Agent送信・実行中の停止ボタン・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カードと inline diff・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・軽量ファイルツリー・localhostプレビュー・@ファイルメンション・完了メッセージのMarkdown描画を既存backendへ接続済み。SSE完了後は保存済み履歴を再同期し、`done` と保存処理の順序競合で回答が消えたように見える状態を避ける。外部URLはSimple Browserへ逃がす。980px以下では左ペインをアイコン化し右ペインはヘッダートグルからオーバーレイ表示
+- **Agent Window Phase 2（Cursor寄りのコア体験）**: 生の`tool: read_file`羅列だった進行表示を、ステータスアイコン付きのステップチェックリスト（`webview/src/agentWindowSteps.ts`）へ置き換え。右ペインに`Changes`タブを追加し、タスク内で変更した全ファイルをdiff表示・「元に戻す」付きで一覧化（`webview/src/agentWindowChanges.ts`、`undoFileCheckpoint`/`POST /api/file-change/undo`をAgent Windowへ移植）。承認カード・Changesタブのdiffは共通の`buildLineDiffPreview`（Myers差分、`webview/src/lineDiff.ts`）に切替え、先頭/末尾の共通行を除いた変更ブロックだけを行単位でハイライト（800行超は従来の全置換表示にフォールバック）。サイドバーが未使用だった`GET /api/budget`をAgent Windowから呼び出して予算メーターを配線し、`context_warning`イベントにトークン数・上限・percentを載せてコンテキストメーターも表示。SSE切断時にloadingが固まらないよう5分セーフティタイムアウトを追加。ステップ/Changesはタスク切替時のみリセットし、run完了後の履歴再同期では保持する
 - **UI品質（v0.8.4）**: サイドバーのmutedテキストをWCAG AA（4.5:1）準拠の色に変更し最小フォントを11pxへ統一。日本語フォントスタック（Hiragino Sans / Noto Sans JP / Yu Gothic UI / Meiryo）指定。`:focus-visible` フォーカスリングとアイコンボタンの `aria-label` を両UIに追加
 - **ストリーミング応答**: SSEによるリアルタイム表示
 - **初回オンボーディング**: 初回起動時にOllama開始 / 設定画面への導線を表示
@@ -144,8 +145,9 @@
 | 問題 | 優先度 | 詳細 |
 |------|--------|------|
 | 予算バーの計算が文字列パースに依存 | 解消済み | `webview/src/budget.js` に数値スナップショットを切り出し、`App.tsx` の予算表示を純関数化して解消 |
+| Agent Window承認カードが潰れて見える | 解消済み | `.agent-window-main` を flex 化し、承認待ちがある時は `回答を組み立て中...` より `承認が必要な操作があります` を優先して表示するように修正 |
 | Expressセキュリティ（将来検討） | 低 | 現在は `127.0.0.1` バインドで外部アクセス不可。Extension Host直接実行への移行は中長期課題 |
-| Agent Window追加機能 | 中 | Agent Windowの基本操作、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンション、承認カード内 inline diff は接続済み。OSSモデル推奨プリセット、ライセンスゲートは未実装 |
+| Agent Window追加機能 | 低 | 基本操作・同一タスク二重実行排他・軽量ファイルツリー・localhostプレビュー・@ファイルメンション・ステップチェックリスト・Changesタブ（行単位diff・undo）・予算/コンテキストメーターは接続済み。画像添付・エディタ内容添付・上位モデル再実行（エスカレーション）はサイドバーのみでAgent Window未対応。OSSモデル推奨プリセット、ライセンスの明示的アップグレードUIは未実装（ライセンス強制自体はサーバー側`/api/agent`で共通適用済み） |
 
 ---
 

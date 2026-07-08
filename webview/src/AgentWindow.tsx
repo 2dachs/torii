@@ -23,10 +23,27 @@ import {
   type AgentWindowModelMode,
 } from './agentWindowModelMode';
 import { stripAgentInternalReminder } from './agentWindowMessageText';
+import { initialFileChangesState, type FileChangeEntry } from './agentWindowChanges';
+import { STUCK_LOADING_TIMEOUT_MS } from './stuckLoadingTimeout';
 import { MarkdownContent } from './MarkdownContent';
 import { getAgentWindowProgressText } from './agentWindowProgress';
-import { buildInlineDiffPreview, formatDiffLines } from './diffPreview';
-import type { AgentEvent, ChatMessage, PendingApproval, VsCodeMessage } from './types';
+import { formatDiffLines } from './diffPreview';
+import { buildLineDiffPreview } from './lineDiff';
+import { buildBudgetMeterState } from './budget.js';
+import type { AgentStep } from './agentWindowSteps';
+import type { ChatMessage, PendingApproval, VsCodeMessage } from './types';
+
+interface BudgetSummary {
+  currentCostUsd: number;
+  monthlyBudgetUsd: number;
+  exchangeRate: number;
+}
+
+interface ContextWarningInfo {
+  currentTokens: number;
+  tokenLimit: number;
+  percent: number;
+}
 
 declare const acquireVsCodeApi: undefined | (() => { postMessage(message: unknown): void });
 
@@ -54,7 +71,7 @@ export default function AgentWindow() {
   const [fileTreePath, setFileTreePath] = useState('');
   const [fileTreeEntries, setFileTreeEntries] = useState<FileTreeEntry[]>([]);
   const [fileTreeError, setFileTreeError] = useState<string | null>(null);
-  const [rightPaneTab, setRightPaneTab] = useState<'files' | 'preview'>('files');
+  const [rightPaneTab, setRightPaneTab] = useState<'files' | 'preview' | 'changes'>('files');
   const [rightPaneOpen, setRightPaneOpen] = useState(false);
   const [previewInput, setPreviewInput] = useState('3000');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -65,6 +82,8 @@ export default function AgentWindow() {
   const [mentionError, setMentionError] = useState<string | null>(null);
   const [mentionedFiles, setMentionedFiles] = useState<MentionedFile[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(initialDeleteConfirmState);
+  const [budget, setBudget] = useState<BudgetSummary | null>(null);
+  const [contextWarning, setContextWarning] = useState<ContextWarningInfo | null>(null);
   const [state, setState] = useState<AgentWindowState>({
     tasks: [],
     activeTaskId: null,
@@ -74,6 +93,8 @@ export default function AgentWindow() {
     loading: false,
     streamingText: '',
     agentEvents: [],
+    steps: [],
+    changes: initialFileChangesState,
     pendingApprovals: [],
   });
 
@@ -102,6 +123,26 @@ export default function AgentWindow() {
         setMentionCandidates(toFileMentionEntries(message.data));
         setMentionError(typeof (message as any).error === 'string' ? (message as any).error : null);
       }
+      if (message.command === 'budgetUpdate') {
+        const data = message as any;
+        if (typeof data.totalCostThisMonth === 'number' && typeof data.monthlyBudget === 'number' && typeof data.exchangeRate === 'number') {
+          setBudget({
+            currentCostUsd: data.totalCostThisMonth,
+            monthlyBudgetUsd: data.monthlyBudget,
+            exchangeRate: data.exchangeRate,
+          });
+        }
+      }
+      if (message.command === 'agentEvent' && (message as any).event?.type === 'context_warning') {
+        const event = (message as any).event;
+        if (typeof event.currentTokens === 'number' && typeof event.tokenLimit === 'number') {
+          setContextWarning({
+            currentTokens: event.currentTokens,
+            tokenLimit: event.tokenLimit,
+            percent: typeof event.percent === 'number' ? event.percent : 0,
+          });
+        }
+      }
       setState((current) => {
         const next = applyAgentWindowMessage(current, message);
         for (const command of next.nextCommands) {
@@ -118,15 +159,36 @@ export default function AgentWindow() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // SSEが途中切断されdoneイベントが届かなかった場合にloadingが永久にtrueのまま固まるのを防ぐ
+  useEffect(() => {
+    if (!state.loading) return;
+    const timer = setTimeout(() => {
+      setState((current) => ({ ...current, loading: false, streamingText: '' }));
+    }, STUCK_LOADING_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [state.loading]);
+
   const activeTask = state.tasks.find((task) => task.id === state.activeTaskId) ?? null;
 
   const handleSelectTask = (taskId: string) => {
-    setState((current) => ({ ...current, activeTaskId: taskId, messages: [], historyLoading: true }));
+    setState((current) => ({
+      ...current,
+      activeTaskId: taskId,
+      messages: [],
+      agentEvents: [],
+      steps: [],
+      changes: initialFileChangesState,
+      pendingApprovals: [],
+      streamingText: '',
+      historyLoading: true,
+    }));
+    setContextWarning(null);
     vscode?.postMessage({ command: 'loadChatHistory', taskId });
   };
 
   const handleCreateTask = () => {
     setState((current) => beginNewAgentWindowTask(current));
+    setContextWarning(null);
   };
 
   const handleOpenSettings = () => {
@@ -192,10 +254,18 @@ export default function AgentWindow() {
     handleSendAgent();
   };
 
+  const budgetMeter = budget ? buildBudgetMeterState({
+    currentCostUsd: budget.currentCostUsd,
+    monthlyBudgetUsd: budget.monthlyBudgetUsd,
+    exchangeRate: budget.exchangeRate,
+    displayCurrency: 'JPY',
+  }) : null;
+
   const pendingApprovals = state.pendingApprovals.filter((approval) => !resolvedApprovalIds.has(approval.id));
   const latestUserPrompt = [...state.messages].reverse().find((message) => message.role === 'user')?.content ?? input;
   const progressText = getAgentWindowProgressText({
     loading: state.loading,
+    pendingApprovalCount: pendingApprovals.length,
     prompt: latestUserPrompt,
     streamingText: state.streamingText,
     events: state.agentEvents,
@@ -223,6 +293,10 @@ export default function AgentWindow() {
 
   const handleOpenApprovalDiff = (approvalId: string) => {
     vscode?.postMessage({ command: 'openApprovalDiff', id: approvalId });
+  };
+
+  const handleUndoFileChange = (undoId: string) => {
+    vscode?.postMessage({ command: 'undoFileChange', undoId });
   };
 
   const handleFileTreeEntry = (entry: FileTreeEntry) => {
@@ -331,6 +405,21 @@ export default function AgentWindow() {
             </div>
           )}
         </section>
+        {budgetMeter && (
+          <div className="agent-window-budget" title={budgetMeter.tooltip}>
+            <span>今月の予算</span>
+            <strong>{budgetMeter.label}</strong>
+          </div>
+        )}
+        {contextWarning && (
+          <div
+            className={`agent-window-budget agent-window-context-meter ${contextWarning.percent >= 80 ? 'is-danger' : ''}`}
+            title={`${contextWarning.currentTokens.toLocaleString()} / ${contextWarning.tokenLimit.toLocaleString()} tokens`}
+          >
+            <span>コンテキスト</span>
+            <strong>{Math.round(contextWarning.percent)}%</strong>
+          </div>
+        )}
       </aside>
 
       <section className="agent-window-main">
@@ -407,12 +496,19 @@ export default function AgentWindow() {
               <p>{state.streamingText}</p>
             </article>
           )}
-          {state.agentEvents.length > 0 && (
-            <div className="agent-window-event-list">
-              {state.agentEvents.map((event, index) => (
-                <div key={`${event.type}-${index}`} className="agent-window-event">
-                  {describeAgentEvent(event)}
-                </div>
+          {state.steps.length > 0 && (
+            <div className="agent-window-step-list" role="list" aria-label="Agent steps">
+              {state.steps.map((step) => (
+                <details key={step.id} className={`agent-window-step is-${step.status}`} role="listitem">
+                  <summary>
+                    <span className={`agent-window-step-icon is-${step.status}`} aria-hidden="true">
+                      {stepStatusIcon(step.status)}
+                    </span>
+                    <span className="agent-window-step-label">{step.label}</span>
+                    {step.detail && <span className="agent-window-step-detail">{step.detail}</span>}
+                  </summary>
+                  {step.resultSummary && <p className="agent-window-step-result">{step.resultSummary}</p>}
+                </details>
               ))}
             </div>
           )}
@@ -492,9 +588,10 @@ export default function AgentWindow() {
       <aside className={`agent-window-right-pane ${rightPaneOpen ? 'is-open' : ''}`}>
         <div className="agent-window-tabs">
           <button className={rightPaneTab === 'files' ? 'is-active' : ''} type="button" onClick={() => setRightPaneTab('files')}>Files</button>
+          <button className={rightPaneTab === 'changes' ? 'is-active' : ''} type="button" onClick={() => setRightPaneTab('changes')}>Changes</button>
           <button className={rightPaneTab === 'preview' ? 'is-active' : ''} type="button" onClick={() => setRightPaneTab('preview')}>Preview</button>
         </div>
-        {rightPaneTab === 'files' ? (
+        {rightPaneTab === 'files' && (
           <section className="agent-window-section">
             <h2>Files</h2>
             <div className="agent-window-file-tree-header">
@@ -519,7 +616,23 @@ export default function AgentWindow() {
               </div>
             )}
           </section>
-        ) : (
+        )}
+        {rightPaneTab === 'changes' && (
+          <section className="agent-window-section agent-window-changes-section">
+            <h2>Changes</h2>
+            {state.changes.entries.length === 0 && (
+              <div className="agent-window-empty">このタスクではまだファイル変更がありません</div>
+            )}
+            {state.changes.entries.length > 0 && (
+              <div className="agent-window-changes-list">
+                {state.changes.entries.map((entry) => (
+                  <ChangeEntryRow key={entry.undoId} entry={entry} onUndo={handleUndoFileChange} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+        {rightPaneTab === 'preview' && (
           <section className="agent-window-section agent-window-preview-section">
             <h2>Preview</h2>
             <div className="agent-window-preview-controls">
@@ -558,12 +671,11 @@ function approvalSummary(approval: PendingApproval): string {
   return command || filePath || approval.tool;
 }
 
-function renderApprovalDiff(approval: PendingApproval): JSX.Element | null {
-  const approvalData = approval.data as Record<string, unknown>;
-  const oldContent = typeof approvalData.oldContent === 'string' ? approvalData.oldContent : null;
-  const newContent = typeof approvalData.newContent === 'string' ? approvalData.newContent : null;
-  const skippedReason = typeof approvalData.diffPreviewSkippedReason === 'string' ? approvalData.diffPreviewSkippedReason : null;
-
+function DiffBlock({ oldContent, newContent, skippedReason }: {
+  oldContent?: string | null;
+  newContent?: string | null;
+  skippedReason?: string | null;
+}): JSX.Element | null {
   if (!oldContent || !newContent) {
     if (!skippedReason) return null;
     return (
@@ -573,28 +685,78 @@ function renderApprovalDiff(approval: PendingApproval): JSX.Element | null {
     );
   }
 
-  const preview = buildInlineDiffPreview(oldContent, newContent);
+  const preview = buildLineDiffPreview(oldContent, newContent);
+  const summary = preview.isChanged
+    ? `先頭 ${preview.prefix} 行・末尾 ${preview.suffix} 行は変更なし / ${preview.originalLineCount} → ${preview.nextLineCount} 行`
+    : '差分はありません';
+
+  if (preview.ops) {
+    return (
+      <div className="agent-window-approval-diff">
+        <div className="agent-window-approval-diff-summary">{summary}</div>
+        <pre className="agent-window-approval-diff-unified">
+          {preview.ops.map((op, index) => (
+            <div key={index} className={`agent-window-diff-line is-${op.type}`}>
+              {op.type === 'add' ? '+ ' : op.type === 'remove' ? '- ' : '  '}
+              {op.line}
+            </div>
+          ))}
+        </pre>
+      </div>
+    );
+  }
+
+  // Myersの対象上限を超える巨大な変更のみ、旧来のブロック全置換表示にフォールバックする
+  const fallback = preview.fallback!;
   return (
     <div className="agent-window-approval-diff">
-      <div className="agent-window-approval-diff-summary">
-        {preview.isChanged
-          ? `先頭 ${preview.prefix} 行・末尾 ${preview.suffix} 行は変更なし / ${preview.originalLineCount} → ${preview.nextLineCount} 行`
-          : '差分はありません'}
-      </div>
+      <div className="agent-window-approval-diff-summary">{summary}</div>
       <div className="agent-window-approval-diff-grid">
         <section className="agent-window-approval-diff-column">
           <div className="agent-window-approval-diff-column-title">変更前</div>
           <pre className="agent-window-approval-diff-pre removed">
-            {formatDiffLines(preview.originalChanged, preview.prefix + 1, '- ')}
+            {formatDiffLines(fallback.originalChanged, preview.prefix + 1, '- ')}
           </pre>
         </section>
         <section className="agent-window-approval-diff-column">
           <div className="agent-window-approval-diff-column-title">変更後</div>
           <pre className="agent-window-approval-diff-pre added">
-            {formatDiffLines(preview.nextChanged, preview.prefix + 1, '+ ')}
+            {formatDiffLines(fallback.nextChanged, preview.prefix + 1, '+ ')}
           </pre>
         </section>
       </div>
+    </div>
+  );
+}
+
+function renderApprovalDiff(approval: PendingApproval): JSX.Element | null {
+  const approvalData = approval.data as Record<string, unknown>;
+  const oldContent = typeof approvalData.oldContent === 'string' ? approvalData.oldContent : null;
+  const newContent = typeof approvalData.newContent === 'string' ? approvalData.newContent : null;
+  const skippedReason = typeof approvalData.diffPreviewSkippedReason === 'string' ? approvalData.diffPreviewSkippedReason : null;
+  return <DiffBlock oldContent={oldContent} newContent={newContent} skippedReason={skippedReason} />;
+}
+
+function ChangeEntryRow({ entry, onUndo }: { entry: FileChangeEntry; onUndo: (undoId: string) => void }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const hasDiff = !!entry.oldContent && !!entry.newContent;
+  return (
+    <div className="agent-window-change-row">
+      <div className="agent-window-change-row-header">
+        <span className="agent-window-change-path" title={entry.path}>{entry.path}</span>
+        <span className="agent-window-change-action">{entry.action === 'create' ? '新規' : '更新'}</span>
+      </div>
+      <div className="agent-window-change-row-actions">
+        {hasDiff && (
+          <button type="button" onClick={() => setExpanded((value) => !value)}>
+            {expanded ? 'diffを隠す' : 'diffを表示'}
+          </button>
+        )}
+        <button type="button" disabled={entry.undone} onClick={() => onUndo(entry.undoId)}>
+          {entry.undone ? '元に戻し済み' : '元に戻す'}
+        </button>
+      </div>
+      {expanded && hasDiff && <DiffBlock oldContent={entry.oldContent} newContent={entry.newContent} />}
     </div>
   );
 }
@@ -644,12 +806,9 @@ function formatTaskDate(value: string): string {
   }).format(date);
 }
 
-function describeAgentEvent(event: AgentEvent): string {
-  if (event.type === 'thinking_start') return `thinking #${event.iteration}`;
-  if (event.type === 'tool_use') return `tool: ${event.tool}`;
-  if (event.type === 'tool_result') return `result: ${event.tool} ${event.ok ? 'ok' : 'failed'}`;
-  if (event.type === 'approval_required') return `approval: ${event.tool}`;
-  if (event.type === 'done') return `done: ${event.iterations} iterations`;
-  if (event.type === 'error') return `error: ${event.message}`;
-  return event.type;
+function stepStatusIcon(status: AgentStep['status']): string {
+  if (status === 'running') return '◐';
+  if (status === 'done') return '✓';
+  if (status === 'failed') return '✕';
+  return '○';
 }

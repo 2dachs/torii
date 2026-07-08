@@ -1,0 +1,1 @@
+export const STUCK_LOADING_TIMEOUT_MS = 5 * 60 * 1000;

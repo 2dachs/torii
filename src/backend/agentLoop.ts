@@ -5,6 +5,7 @@ import { ChatMessage } from './storage';
 import { buildSystemPrompt, buildClineTools } from './tools';
 import { sanitizeToolInputForAgentEvent, sanitizeToolOutputForAgentEvent } from './agentEventPayload';
 import { chooseAgentLoopReply } from './agentLoopReply';
+import { getTokenLimit, estimateTokens, buildContextWarning } from './contextWindow';
 
 // ── イベント型（Extension Host → Webview へ転送される） ──
 
@@ -18,7 +19,7 @@ export type AgentEvent =
   | { type: 'file_change_applied'; undoId: string; path: string; action: 'create' | 'update' }
   | { type: 'file_change_undone'; undoId: string; path: string; ok: boolean; message: string }
   | { type: 'privacy_notice'; message: string }
-  | { type: 'context_warning'; message: string }
+  | { type: 'context_warning'; message: string; currentTokens?: number; tokenLimit?: number; percent?: number }
   | { type: 'model_info'; providerId: string; modelName: string; isLocal: boolean }
   | { type: 'done'; iterations: number; tokensUsed: number; costUsd: number; costJpy: number }
   | { type: 'error'; message: string };
@@ -47,33 +48,6 @@ export interface AgentResult {
   costUsd: number;
   costJpy: number;
   iterations: number;
-}
-
-// ── コンテキストウィンドウ管理 ──
-
-const TOKEN_LIMITS: Record<string, number> = {
-  'claude-opus': 180000,
-  'claude-sonnet': 180000,
-  'deepseek-chat': 60000,
-  'deepseek-reasoner': 60000,
-  'gpt-4o': 120000,
-  'gpt-4o-mini': 120000,
-  'gemini-2.5-flash': 1000000,
-  'gemini-2.5-pro': 1000000,
-  'gemini-1.5-pro': 1000000,
-  'default': 60000,
-};
-const WARNING_THRESHOLD = 0.8;
-
-function estimateTokens(messages: { content: { type: string; text: string }[] }[]): number {
-  const totalChars = messages.reduce((sum, m) =>
-    sum + m.content.reduce((s, c) => s + (c.type === 'text' ? c.text.length : 0), 0), 0);
-  return Math.floor(totalChars / 4);
-}
-
-function getTokenLimit(modelId: string): number {
-  const key = Object.keys(TOKEN_LIMITS).find(k => modelId.toLowerCase().includes(k));
-  return key ? TOKEN_LIMITS[key] : TOKEN_LIMITS['default'];
 }
 
 // ── プロバイダー ID マッピング（Torii → Cline SDK） ──
@@ -170,11 +144,9 @@ export async function runAgentLoop(params: AgentParams): Promise<AgentResult> {
   // ── コンテキストウィンドウ管理 ──
   const tokenLimit = getTokenLimit(model);
   // 上限の80%を超えていたら先に警告（削除前に通知することでユーザーが状況を把握できる）
-  if (estimateTokens(initialMessages) > tokenLimit * WARNING_THRESHOLD) {
-    onEvent({
-      type: 'context_warning',
-      message: '⚠️ 会話が長くなっています。精度が下がる場合があります。新しいタスクの開始をお勧めします。',
-    });
+  const contextWarning = buildContextWarning(estimateTokens(initialMessages), tokenLimit);
+  if (contextWarning) {
+    onEvent({ type: 'context_warning', ...contextWarning });
   }
   // 上限超過時は古いメッセージを削除（先頭から削除、最低10件は残す）
   while (estimateTokens(initialMessages) > tokenLimit && initialMessages.length > 10) {

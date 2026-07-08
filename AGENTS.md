@@ -148,6 +148,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - Irori 共有core: `packages/core/` に `estimateTokens` / `calculateCost` / `routeMessage` と型定義を切り出し、Web版から利用できるようにした
 - エージェントループ: `read_file` / `write_file` / `replace_in_file` / `run_command` / `list_directory` / `search_files` / `grep`
 - Agent Window Phase 1: `torii.openAgentWindow` コマンドでエディタタブ型WebviewPanelを開き、Viteの `index.html` / `agent-window.html` 2エントリでサイドバーUIとAgent Window UIを分離。第1エディタグループに開き、タスク一覧・履歴表示・AIタイトル自動生成付き新規タスク作成・確認付きタスク削除・Agent送信・実行中の停止ボタン・モデル用途切替（Auto / 相談 / 実装 / GLM実装）・日本語の進行表示・基本進捗イベント・承認/拒否カード・同一タスク二重実行排他・プロジェクト名/パス表示・設定導線・右ペインの軽量ファイルツリー・localhostプレビュー・@ファイルメンション・完了メッセージのMarkdown描画まで接続済み。外部URLはVS Code Simple Browserへフォールバック。980px以下は左ペインをアイコン化し右ペインはヘッダートグルでオーバーレイ表示
+- Agent Window Phase 2（Cursor寄りのコア体験）: 進行表示を生イベント羅列からステータスアイコン付きステップチェックリスト（`webview/src/agentWindowSteps.ts`）へ置き換え。右ペインに `Changes` タブを追加し、タスク内で変更した全ファイルをdiff表示・「元に戻す」付きで一覧化（サイドバーの `undoFileCheckpoint`/`POST /api/file-change/undo` をAgent Windowへ移植）。承認カード・Changesタブの差分表示はMyers差分ベースの `buildLineDiffPreview`（`webview/src/lineDiff.ts`）に切替え、変更ブロックのうち実際に変わった行だけをハイライト（800行超は従来の全置換表示にフォールバック）。未使用だった `GET /api/budget` をAgent Windowから呼び出して予算メーターを配線し、`context_warning` イベントにトークン数・上限・percentを追加してコンテキストメーターも表示。SSE切断時にloadingが固まらないよう5分セーフティタイムアウトを追加。ステップ/Changesはタスク切替時のみリセットし、run完了後の履歴再同期では保持する
 - UI品質（0.8.4）: サイドバーのmutedテキスト色をWCAG AA準拠へ変更・最小フォント11px・日本語フォントスタック指定・`:focus-visible` フォーカスリング・アイコンボタンへの `aria-label` 付与
 - ストリーミング表示（SSE）
 - 承認フロー: コマンド実行・ファイル書き込み時のワンクリック承認UI
@@ -167,6 +168,7 @@ npm run vscode:prepublish  # 両方まとめてビルド
 - コンテキストウィンドウ管理: トークン推定・上限80%超で警告・超過時に古メッセージ自動削除
 - プライバシールーティング除外ワード: `token` 等のプログラミング用語の誤検知を防止
 - エージェントエンジン: `@cline/agents` を使用（Cline SDK移行完了）
+- git コミットメッセージの英語化: エージェントがユーザーのリポジトリで `git commit` する際、コミットメッセージは常に英語・Conventional Commits風（`type: summary`）で書くようシステムプロンプトへ明示（`src/backend/systemPrompt.ts`、チャット応答自体は引き続き日本語）
 
 ---
 
@@ -179,13 +181,50 @@ npm run vscode:prepublish  # 両方まとめてビルド
 | コンテキストウィンドウ管理 | **実装済み** | `agentLoop.ts` に `getTokenLimit` / `estimateTokens` / `WARNING_THRESHOLD` を実装。上限の80%超で `context_warning` イベント送出、超過時は古いメッセージを自動削除 |
 | `token` キーワード誤検知 | **対処済み** | `router.ts` に除外ワードリストを実装。除外ワードが含まれる場合はプライバシールーティングをスキップする仕組みを追加済み |
 | Cline SDK移行 | **完了** | `agentLoop.ts` で `@cline/agents` を使用中。`Agent` クラスを動的インポートして利用している |
-| Agent Window追加機能 | **一部未実装** | WebviewPanel、Viteマルチエントリ、タスク/履歴/Agent送信/承認カード、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンションは接続済み。OSSモデル推奨プリセット、ライセンスゲートは未実装 |
+| Agent Window追加機能 | **一部未実装** | WebviewPanel、Viteマルチエントリ、タスク/履歴/Agent送信/承認カード、同一タスク二重実行排他、軽量ファイルツリー、localhostプレビュー、外部URLのSimple Browserフォールバック、@ファイルメンション、ステップチェックリスト、Changesタブ（行単位diff・undo）、予算/コンテキストメーターは接続済み。画像添付・エディタ内容添付・上位モデル再実行（エスカレーション）はサイドバーのみでAgent Window未対応。OSSモデル推奨プリセット、ライセンスの明示的アップグレードUIは未実装（ライセンス強制自体は `server.ts` の `/api/agent` でサイドバー/Agent Window共通に適用済み） |
 
 ---
 
 ## 修正・変更ログ
 
+### 2026-07-08
+- **0.9.1 コミット英語化 + Agent Window Cursor化（コア体験）**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: 配布物用の版を `0.9.1` へ更新
+- **git コミットメッセージの英語化**:
+  - **`src/backend/systemPrompt.ts`**（新規）: `tools.ts` から `buildSystemPrompt` / `buildWorkspaceTree` / `SKIP_DIRS` を抽出。vscode非依存にして単体テスト可能化。`## コマンド実行の規則` に「git commit のコミットメッセージは英語で書く。Conventional Commits ライクに `type: summary` 形式」を追加
+  - **`src/backend/tools.ts`**: 抽出した関数を re-export し既存の import 元（`agentLoop.ts` / `server.ts`）は無変更で動作
+  - **`src/backend/toolsCommitLanguage.test.ts`** / **`package.json`**: `buildSystemPrompt` の返り値に英語コミット規則の文言が含まれることを検証する回帰テストと `test:tools-commit-language` を追加
+- **Agent Window: 可視化されたステップチェックリスト**:
+  - **`webview/src/toolLabels.ts`**（新規）: `App.tsx` にあったツール名→日本語ラベル/アイコン/カテゴリのマッピングを共有モジュールへ切り出し、`App.tsx` はここから import するよう変更（重複排除）
+  - **`webview/src/agentWindowSteps.ts`** / **`agentWindowSteps.test.ts`**: `tool_use`/`tool_result`/`file_change_applied`/`file_change_undone` をステータス付きステップ（pending/running/done/failed）へ変換する純粋reducerを追加
+  - **`webview/src/agentWindowState.ts`**: `steps` フィールドを追加。タスク切替（`agentWindowTaskCreated`/`loadTasks`）時のみリセットし、`agentRunEnded` 後の履歴再同期（`loadChatHistory`）ではクリアしないよう修正。これにより実行完了後にステップ一覧が消えていた挙動を解消
+  - **`webview/src/AgentWindow.tsx`** / **`webview/src/agent-window.css`**: モノスペースの生イベント羅列 (`describeAgentEvent`) を、ステータスアイコン（○/◐/✓/✕）付きの折りたたみ可能なチェックリストへ置き換え
+- **Agent Window: 変更ファイルの集約ビュー（Changesタブ）+ undo配線**:
+  - **`webview/src/agentWindowChanges.ts`** / **`agentWindowChanges.test.ts`**: `file_change_applied`/`file_change_undone` イベントと `approval_required` 時の oldContent/newContent スナップショットから、タスク内で変更した全ファイルの一覧（diff・undo済みフラグ付き）を組み立てる純粋reducerを追加
+  - **`webview/src/agentWindowState.ts`**: `changes` フィールドを追加。`steps` と同じくタスク切替時のみリセットし、run完了後の履歴再同期では保持
+  - **`webview/src/AgentWindow.tsx`**: 右ペインに `Files`/`Preview` と並ぶ `Changes` タブを追加。各ファイルの diff 表示・「元に戻す」ボタンを提供。承認カードとChangesタブで共有する `DiffBlock` コンポーネントへリファクタリング
+  - **`src/webview/agentWindowPanel.ts`**: `undoFileChange` メッセージハンドラを追加。`provider.ts` の `_handleUndoFileChange` と同じ形で既存の `POST /api/file-change/undo` を呼ぶだけで、サイドバー既存の undo インフラをそのまま再利用
+- **Agent Window: 正確な行単位diff**:
+  - **`webview/src/lineDiff.ts`** / **`lineDiff.test.ts`**: Myers差分（O((N+M)D)）を実装。既存の prefix/suffix トリムで縮めた変更ブロックにのみ適用し、実際に変わった行だけをadd/removeとしてハイライトする（従来は変更ブロック全体を削除＋追加として表示していた）。縮小後ブロックが片側800行を超える場合は従来の全置換表示にフォールバックし、UIスレッドが固まるリスクを避ける
+  - **`webview/src/AgentWindow.tsx`** / **`webview/src/agent-window.css`**: `DiffBlock` を `buildLineDiffPreview` ベースの統一diff表示（+/-/空白プレフィックス付き1カラム）に変更。フォールバック時のみ旧来の2カラム表示を維持
+- **Agent Window: 予算・コンテキストウィンドウメーターの配線**:
+  - **`src/webview/agentWindowPanel.ts`**: 既存だが未使用だった `GET /api/budget` を呼び出す `sendBudgetSummary()` を追加し、初期表示時とAgent実行完了時に `budgetUpdate` をWebviewへ送信
+  - **`src/backend/contextWindow.ts`**（新規）/ **`contextWindow.test.ts`**: `agentLoop.ts` にあった `TOKEN_LIMITS`/`WARNING_THRESHOLD`/`estimateTokens`/`getTokenLimit` を vscode非依存の純粋モジュールへ切り出し、`buildContextWarning` を追加
+  - **`src/backend/agentLoop.ts`** / **`webview/src/types.ts`**: `context_warning` イベントに `currentTokens`/`tokenLimit`/`percent` を追加（`AgentEvent` 型は両ファイルで独立宣言のため両方同期）
+  - **`webview/src/AgentWindow.tsx`** / **`webview/src/agent-window.css`**: サイドバーと同じ `webview/src/budget.js` の `buildBudgetMeterState` を再利用し、死んでいた `.agent-window-budget` CSSを配線。コンテキスト使用率メーター（80%以上でdanger色）も追加
+- **Agent Window: stuck-loading 5分セーフティタイムアウト**:
+  - **`webview/src/stuckLoadingTimeout.ts`**（新規）/ **`stuckLoadingTimeout.test.ts`**: サイドバー（`App.tsx`）に既存の5分タイムアウト定数を共有モジュール化
+  - **`webview/src/AgentWindow.tsx`**: SSEが `done`/`error` なしで切断された場合に5分後 `loading` を自動解除するuseEffectを追加（サイドバーのみに存在し、Agent Windowでは無限に固まりうる挙動だった）
+- **`TASKS.md`**: 0.8.4リリース分（全項目完了済み）を、本リリースのタスク一覧（T1〜T11、Phase 2の機能パリティ項目は後回し可として保持）へ差し替え
+- **AGENTS.md / DESIGN.md**: 実装済み機能・既知の課題テーブル・実装状態を本リリース内容に合わせて更新
+
 ### 2026-07-07
+- **0.8.9 VSIX配布用バージョン更新**:
+  - **`package.json` / `package-lock.json` / `DESIGN.md`**: 承認カード表示崩れ修正の配布用に版を `0.8.9` へ更新
+- **Agent Window: 承認カード表示崩れと進行表示優先順位の修正**:
+  - **`webview/src/agent-window.css`**: `.agent-window-main` を grid から flex に変更し、条件付き要素の増減で承認カードが潰れないようにした。承認バーは内部スクロール可能にして、diffが大きくてもボタンが画面外に押し出されないようにした
+  - **`webview/src/agentWindowProgress.ts` / `webview/src/AgentWindow.tsx`**: 承認待ちがある場合は streamingText より先に `承認が必要な操作があります` を返すようにして、実際の待ち状態が見えるようにした
+  - **`webview/src/agentWindowProgress.test.ts`**: 承認待ちがある状態で streamingText が残っていても承認文言を優先する回帰テストを追加
 - **0.8.6 VSIX配布用バージョン更新**:
   - **`package.json` / `package-lock.json` / `DESIGN.md`**: 配布物用の版を `0.8.6` へ更新
 - **0.8.7 VSIX配布用バージョン更新**:
